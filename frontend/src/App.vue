@@ -6,6 +6,8 @@ const theme = ref('dark')
 const brainDump = ref('')
 const tasks = ref([])
 const isListening = ref(false)
+let mediaRecorder = null
+let audioChunks = []
 
 const isDark = computed(() => theme.value === 'dark')
 
@@ -29,9 +31,37 @@ async function clearDone() {
   tasks.value = tasks.value.filter(t => !t.done)
 }
 
-function toggleMic() {
-  isListening.value = !isListening.value
-  // TODO: connect to speech-to-text
+async function toggleMic() {
+  if (isListening.value) {
+    mediaRecorder?.stop()
+    return
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+    audioChunks = []
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data)
+    }
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(audioChunks, { type: 'audio/webm' })
+      isListening.value = false
+      mediaRecorder = null
+      audioChunks = []
+      const form = new FormData()
+      form.append('file', blob, 'recording.webm')
+      const res = await fetch('http://127.0.0.1:8000/transcribe', { method: 'POST', body: form })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.text) brainDump.value = data.text
+      }
+    }
+    mediaRecorder.start()
+    isListening.value = true
+  } catch {
+    isListening.value = false
+  }
 }
 
 onMounted(async () => {
