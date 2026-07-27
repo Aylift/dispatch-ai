@@ -1,5 +1,6 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { fetchTasks, createTask, updateTask, clearDoneTasks } from './api.js'
 
 const theme = ref('dark')
 const brainDump = ref('')
@@ -12,17 +13,19 @@ function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
 }
 
-function handleDump() {
+async function handleDump() {
   if (!brainDump.value.trim()) return
-  tasks.value.push({
-    id: Date.now(),
-    text: brainDump.value,
-    done: false,
-  })
+  const task = await createTask(brainDump.value)
+  tasks.value.unshift(task)
   brainDump.value = ''
 }
 
-function clearDone() {
+async function toggleDone(task) {
+  await updateTask(task.id, { done: task.done })
+}
+
+async function clearDone() {
+  await clearDoneTasks()
   tasks.value = tasks.value.filter(t => !t.done)
 }
 
@@ -30,6 +33,10 @@ function toggleMic() {
   isListening.value = !isListening.value
   // TODO: connect to speech-to-text
 }
+
+onMounted(async () => {
+  tasks.value = await fetchTasks()
+})
 </script>
 
 <template>
@@ -106,7 +113,8 @@ function toggleMic() {
       >
         <input
           type="checkbox"
-          v-model="task.done"
+          :checked="task.done"
+          @change="task.done = !task.done; toggleDone(task)"
           class="appearance-none w-4 h-4 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0 mt-0.5"
           :class="{ 'opacity-40': task.done }"
         />
@@ -203,7 +211,8 @@ function toggleMic() {
       >
         <input
           type="checkbox"
-          v-model="task.done"
+          :checked="task.done"
+          @change="task.done = !task.done; toggleDone(task)"
           class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
           :class="{ 'opacity-40': task.done }"
         />
