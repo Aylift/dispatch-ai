@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Rust / Cargo (Tauri)
+target/
+frontend/src-tauri/target/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+
+# Tauri build artifacts
+frontend/src-tauri/gen/
+
