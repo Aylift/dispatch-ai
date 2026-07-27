@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 const theme = ref('dark')
 const brainDump = ref('')
 const tasks = ref([])
+const isListening = ref(false)
 
 const isDark = computed(() => theme.value === 'dark')
 
@@ -23,6 +24,11 @@ function handleDump() {
 
 function clearDone() {
   tasks.value = tasks.value.filter(t => !t.done)
+}
+
+function toggleMic() {
+  isListening.value = !isListening.value
+  // TODO: connect to speech-to-text
 }
 </script>
 
@@ -60,6 +66,21 @@ function clearDone() {
         rows="3"
       />
       <div class="flex gap-2 mt-2">
+        <button
+          @click="toggleMic"
+          class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
+          :class="isListening
+            ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse'
+            : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 hover:border-zinc-600'"
+          :title="isListening ? 'Stop recording' : 'Start voice input'"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="2" width="6" height="11" rx="3"/>
+            <path d="M5 10a7 7 0 0114 0"/>
+            <path d="M12 19v3M8 22h8"/>
+          </svg>
+          {{ isListening ? 'Listening...' : 'Voice' }}
+        </button>
         <button
           @click="handleDump"
           class="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/30 px-3 py-1.5 rounded-md hover:bg-sky-500/20 active:bg-sky-500/30 transition-all"
@@ -142,6 +163,21 @@ function clearDone() {
         rows="3"
       />
       <div class="flex gap-2 mt-2">
+        <button
+          @click="toggleMic"
+          class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
+          :class="isListening
+            ? 'bg-red-500/10 text-red-600 border border-red-500/30 animate-pulse'
+            : 'bg-zinc-100 text-zinc-500 border border-zinc-200 hover:text-zinc-700 hover:border-zinc-300'"
+          :title="isListening ? 'Stop recording' : 'Start voice input'"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="2" width="6" height="11" rx="3"/>
+            <path d="M5 10a7 7 0 0114 0"/>
+            <path d="M12 19v3M8 22h8"/>
+          </svg>
+          {{ isListening ? 'Listening...' : 'Voice' }}
+        </button>
         <button
           @click="handleDump"
           class="text-xs bg-sky-500 text-white px-3 py-1.5 rounded-md hover:bg-sky-600 active:bg-sky-700 transition-all shadow-sm"
