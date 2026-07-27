@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import init_db, get_db
 from models import Task
 from schemas import TaskCreate, TaskUpdate, TaskOut
+from agent import transcribe_audio
 
 
 @asynccontextmanager
@@ -24,6 +25,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.post("/transcribe")
+async def transcribe(file: UploadFile = File(...)):
+    audio_data = await file.read()
+    text = transcribe_audio(audio_data, file.filename or "recording.webm")
+    print(f"[transcribe] received {len(audio_data)} bytes, result: '{text}'")
+    return {"text": text}
 
 
 @app.get("/tasks", response_model=list[TaskOut])
