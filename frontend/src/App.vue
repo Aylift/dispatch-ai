@@ -1,13 +1,13 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchTasks, createTask, updateTask, clearDoneTasks } from './api.js'
+import { useVoice } from './useVoice.js'
 
 const theme = ref('dark')
 const brainDump = ref('')
 const tasks = ref([])
 const isListening = ref(false)
-let mediaRecorder = null
-let audioChunks = []
+const interimText = ref('')
 
 const isDark = computed(() => theme.value === 'dark')
 
@@ -31,36 +31,25 @@ async function clearDone() {
   tasks.value = tasks.value.filter(t => !t.done)
 }
 
-async function toggleMic() {
-  if (isListening.value) {
-    mediaRecorder?.stop()
-    return
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-    audioChunks = []
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data)
-    }
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop())
-      const blob = new Blob(audioChunks, { type: 'audio/webm' })
-      isListening.value = false
-      mediaRecorder = null
-      audioChunks = []
-      const form = new FormData()
-      form.append('file', blob, 'recording.webm')
-      const res = await fetch('http://127.0.0.1:8000/transcribe', { method: 'POST', body: form })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.text) brainDump.value = data.text
-      }
-    }
-    mediaRecorder.start()
-    isListening.value = true
-  } catch {
+const voice = useVoice({
+  onPartial(text) {
+    interimText.value = text
+  },
+  onFinal(text) {
+    if (text) brainDump.value = text
+    interimText.value = ''
     isListening.value = false
+  },
+})
+
+function toggleMic() {
+  if (isListening.value) {
+    voice.stop()
+    isListening.value = false
+    interimText.value = ''
+  } else {
+    voice.start()
+    isListening.value = true
   }
 }
 
@@ -102,6 +91,9 @@ onMounted(async () => {
         class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
         rows="3"
       />
+      <div v-if="interimText" class="text-xs text-sky-400/60 mt-1 italic animate-pulse">
+        {{ interimText }}
+      </div>
       <div class="flex gap-2 mt-2">
         <button
           @click="toggleMic"
@@ -200,6 +192,9 @@ onMounted(async () => {
         class="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
         rows="3"
       />
+      <div v-if="interimText" class="text-xs text-sky-500/60 mt-1 italic animate-pulse">
+        {{ interimText }}
+      </div>
       <div class="flex gap-2 mt-2">
         <button
           @click="toggleMic"

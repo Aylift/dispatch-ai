@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+import json
+import asyncio
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +10,7 @@ from database import init_db, get_db
 from models import Task
 from schemas import TaskCreate, TaskUpdate, TaskOut
 from agent import transcribe_audio
+from stream_agent import stream_transcribe
 
 
 @asynccontextmanager
@@ -25,6 +28,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+active_transcriptions = {}
+
+
+@app.websocket("/ws/transcribe")
+async def ws_transcribe(websocket: WebSocket):
+    await websocket.accept()
+    send_audio, transcript_gen, close = await stream_transcribe()
+    listener_task = None
+
+    async def send_transcripts():
+        async for msg in transcript_gen:
+            await websocket.send_json(msg)
+
+    listener_task = asyncio.create_task(send_transcripts())
+
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            await send_audio(data)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await close()
+        if listener_task:
+            listener_task.cancel()
 
 
 @app.post("/transcribe")
@@ -82,3 +111,4 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Task not found")
     await db.delete(task)
     await db.commit()
+
