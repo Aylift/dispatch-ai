@@ -2,6 +2,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchTasks, createTask, updateTask, clearDoneTasks } from './api.js'
 import { useVoice } from './useVoice.js'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+
+const appWindow = getCurrentWebviewWindow()
 
 const theme = ref('dark')
 const brainDump = ref('')
@@ -64,7 +67,7 @@ onMounted(async () => {
     v-if="isDark"
     class="h-screen w-screen bg-zinc-900/95 text-zinc-100 p-5 flex flex-col overflow-hidden select-none"
   >
-    <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-700/50">
+    <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-700/50" data-tauri-drag-region>
       <div>
         <h1 class="text-base font-semibold tracking-wider text-zinc-100">
           <span class="text-sky-400">◆</span> DISPATCH
@@ -166,7 +169,7 @@ onMounted(async () => {
     v-else
     class="h-screen w-screen bg-white/95 text-zinc-800 p-5 flex flex-col overflow-hidden select-none"
   >
-    <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-200/80">
+    <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-200/80" data-tauri-drag-region>
       <div>
         <h1 class="text-base font-semibold tracking-wider text-zinc-800">
           <span class="text-sky-500">◆</span> DISPATCH
