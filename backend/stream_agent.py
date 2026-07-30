@@ -48,25 +48,57 @@ async def stream_transcribe():
 
             # Task that receives messages from Deepgram
             async def receiver():
-                accumulated = ""
+                full_transcript = ""
+                current_utterance = ""
+                last_interim = ""
+                last_final_time = 0
                 async for raw in ws:
                     msg = json.loads(raw)
-                    if msg.get("type") == "Results":
-                        sentence = msg["channel"]["alternatives"][0]["transcript"]
-                        if sentence:
-                            is_final = msg.get("is_final", False)
-                            if is_final:
-                                accumulated = sentence
-                            await transcript_queue.put({"text": sentence, "done": False})
-                    elif msg.get("type") == "UtteranceEnd":
-                        if accumulated.strip():
-                            await transcript_queue.put({"text": accumulated.strip(), "done": True})
-                        accumulated = ""
+                    now = asyncio.get_event_loop().time()
+
+                    if msg.get("type") == "UtteranceEnd":
+                        if current_utterance.strip():
+                            full_transcript += (" " if full_transcript else "") + current_utterance.strip()
+                            await transcript_queue.put({"text": full_transcript, "done": True})
+                            current_utterance = ""
+                            last_interim = ""
+                        # Deepgram detected silence — tell frontend to stop
+                        await transcript_queue.put({"stop": True})
+                        return
+
+                    # If we haven't gotten a final result in 3 seconds, stop
+                    if last_final_time and (now - last_final_time) > 3.0 and full_transcript:
+                        await transcript_queue.put({"stop": True})
+                        return
+
+                    if msg.get("type") != "Results":
+                        continue
+                    sentence = msg.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
+                    if not sentence:
+                        continue
+                    is_final = msg.get("is_final", False)
+                    if is_final:
+                        print(f"[deepgram] final={is_final} text='{sentence[:100]}'")
+                        last_final_time = now
+                        if sentence not in full_transcript:
+                            full_transcript += (" " if full_transcript else "") + sentence
+                        await transcript_queue.put({"text": full_transcript, "done": True})
+                        current_utterance = ""
+                        last_interim = ""
+                    else:
+                        print(f"[deepgram] final={is_final} text='{sentence[:100]}'")
+                        # Interim — show the full transcript + current thought
+                        display = full_transcript + (" " if full_transcript else "") + sentence if sentence else full_transcript
+                        if display != last_interim:
+                            await transcript_queue.put({"text": display, "done": False})
+                            last_interim = display
 
             sender_task = asyncio.create_task(sender())
             receiver_task = asyncio.create_task(receiver())
 
+            print("[stream] Deepgram streaming connected")
             await stop_event.wait()
+            print("[stream] stopping Deepgram connection")
             sender_task.cancel()
             receiver_task.cancel()
 
@@ -86,4 +118,5 @@ async def stream_transcribe():
         await dg_task
 
     return send_audio, transcript_listener(), close
+
 

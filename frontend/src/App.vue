@@ -1,16 +1,12 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { fetchTasks, createTask, updateTask, clearDoneTasks } from './api.js'
 import { useVoice } from './useVoice.js'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-
-const appWindow = getCurrentWebviewWindow()
 
 const theme = ref('dark')
 const brainDump = ref('')
 const tasks = ref([])
 const isListening = ref(false)
-const interimText = ref('')
 
 const isDark = computed(() => theme.value === 'dark')
 
@@ -35,12 +31,10 @@ async function clearDone() {
 }
 
 const voice = useVoice({
-  onPartial(text) {
-    interimText.value = text
+  onInterim(text, isFinal) {
+    brainDump.value = text
   },
-  onFinal(text) {
-    if (text) brainDump.value = text
-    interimText.value = ''
+  onStop() {
     isListening.value = false
   },
 })
@@ -49,7 +43,6 @@ function toggleMic() {
   if (isListening.value) {
     voice.stop()
     isListening.value = false
-    interimText.value = ''
   } else {
     voice.start()
     isListening.value = true
@@ -92,11 +85,8 @@ onMounted(async () => {
         @keydown.ctrl.enter="handleDump"
         placeholder="Brain dump here... (Ctrl+Enter to submit)"
         class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
-        rows="3"
+                rows="3"
       />
-      <div v-if="interimText" class="text-xs text-sky-400/60 mt-1 italic animate-pulse">
-        {{ interimText }}
-      </div>
       <div class="flex gap-2 mt-2">
         <button
           @click="toggleMic"
@@ -193,11 +183,8 @@ onMounted(async () => {
         @keydown.ctrl.enter="handleDump"
         placeholder="Brain dump here... (Ctrl+Enter to submit)"
         class="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
-        rows="3"
+                rows="3"
       />
-      <div v-if="interimText" class="text-xs text-sky-500/60 mt-1 italic animate-pulse">
-        {{ interimText }}
-      </div>
       <div class="flex gap-2 mt-2">
         <button
           @click="toggleMic"

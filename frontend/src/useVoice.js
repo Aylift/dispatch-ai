@@ -1,24 +1,41 @@
-const WS_URL = 'ws://127.0.0.1:8000/ws/transcribe'
+const WS_URL = 'ws://localhost:8000/ws/transcribe'
 
-export function useVoice({ onPartial, onFinal }) {
+export function useVoice({ onInterim, onStop }) {
   let mediaRecorder = null
   let ws = null
-  let isListening = false
+  let listening = false
+  let doneTimeout = null
 
   async function start() {
-    if (isListening) return
-    isListening = true
+    if (listening) return
+    listening = true
 
     ws = new WebSocket(WS_URL)
     ws.binaryType = 'arraybuffer'
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data)
-      if (msg.done) {
-        onFinal(msg.text)
+      if (msg.stop) {
+        console.log('[voice] received stop signal')
         stop()
-      } else if (!msg.done && msg.text) {
-        onPartial(msg.text)
+        if (onStop) onStop()
+        return
+      }
+      if (msg.done) {
+        if (msg.text) onInterim(msg.text, true)
+        if (doneTimeout) clearTimeout(doneTimeout)
+        doneTimeout = setTimeout(() => {
+          stop()
+          if (onStop) onStop()
+        }, 3000)
+      } else if (msg.text) {
+        onInterim(msg.text, false)
+        if (doneTimeout) clearTimeout(doneTimeout)
+        doneTimeout = setTimeout(() => {
+          console.log('[voice] auto-stop timeout (interim)')
+          stop()
+          if (onStop) onStop()
+        }, 5000)
       }
     }
 
@@ -31,19 +48,19 @@ export function useVoice({ onPartial, onFinal }) {
             ws.send(e.data)
           }
         }
-        mediaRecorder.start(250) // send chunks every 250ms
+        mediaRecorder.start(250)
       } catch {
-        isListening = false
+        listening = false
+        if (onStop) onStop()
       }
     }
 
-    ws.onclose = () => {
-      stop()
-    }
+    ws.onclose = () => stop()
   }
 
   function stop() {
-    isListening = false
+    listening = false
+    if (doneTimeout) { clearTimeout(doneTimeout); doneTimeout = null }
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stream?.getTracks().forEach(t => t.stop())
       mediaRecorder.stop()
@@ -54,6 +71,6 @@ export function useVoice({ onPartial, onFinal }) {
     }
   }
 
-  return { start, stop, isListening: () => isListening }
+  return { start, stop, isListening: () => listening }
 }
 
