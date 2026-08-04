@@ -66,13 +66,17 @@ async def transcribe(file: UploadFile = File(...)):
 
 @app.get("/tasks", response_model=list[TaskOut])
 async def list_tasks(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task).order_by(Task.id.desc()))
+    # Sort by priority (1=highest) first, then undone first, then newest
+    result = await db.execute(
+        select(Task)
+        .order_by(Task.done.asc(), Task.priority.asc(), Task.id.desc())
+    )
     return result.scalars().all()
 
 
 @app.post("/tasks", response_model=TaskOut, status_code=201)
 async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
-    task = Task(text=body.text)
+    task = Task(text=body.text, priority=body.priority)
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -89,6 +93,8 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         task.text = body.text
     if body.done is not None:
         task.done = body.done
+    if body.priority is not None:
+        task.priority = body.priority
     await db.commit()
     await db.refresh(task)
     return task

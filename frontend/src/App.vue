@@ -7,8 +7,26 @@ const theme = ref('dark')
 const brainDump = ref('')
 const tasks = ref([])
 const isListening = ref(false)
+const selectedPriority = ref(3)
+
+const PRIORITIES = {
+  1: { label: 'Critical', text: 'text-red-400', dot: 'bg-red-500', badge: 'bg-red-500/15 text-red-400 border-red-500/40' },
+  2: { label: 'High', text: 'text-orange-400', dot: 'bg-orange-500', badge: 'bg-orange-500/15 text-orange-400 border-orange-500/40' },
+  3: { label: 'Medium', text: 'text-yellow-400', dot: 'bg-yellow-500', badge: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/40' },
+  4: { label: 'Low', text: 'text-sky-400', dot: 'bg-sky-500', badge: 'bg-sky-500/15 text-sky-400 border-sky-500/40' },
+  5: { label: 'Optional', text: 'text-zinc-400', dot: 'bg-zinc-500', badge: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40' },
+}
 
 const isDark = computed(() => theme.value === 'dark')
+
+// Sort tasks: undone first, then by priority (1=highest), then newest
+const sortedTasks = computed(() => {
+  return [...tasks.value].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1
+    if (a.priority !== b.priority) return a.priority - b.priority
+    return b.id - a.id
+  })
+})
 
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
@@ -16,9 +34,10 @@ function toggleTheme() {
 
 async function handleDump() {
   if (!brainDump.value.trim()) return
-  const task = await createTask(brainDump.value)
+  const task = await createTask(brainDump.value, selectedPriority.value)
   tasks.value.unshift(task)
   brainDump.value = ''
+  selectedPriority.value = 3
 }
 
 async function toggleDone(task) {
@@ -28,6 +47,13 @@ async function toggleDone(task) {
 async function clearDone() {
   await clearDoneTasks()
   tasks.value = tasks.value.filter(t => !t.done)
+}
+
+async function cyclePriority(task) {
+  // cycle 1->2->3->4->5->1
+  const next = (task.priority % 5) + 1
+  const updated = await updateTask(task.id, { priority: next })
+  task.priority = updated.priority
 }
 
 const voice = useVoice({
@@ -87,7 +113,7 @@ onMounted(async () => {
         class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
                 rows="3"
       />
-      <div class="flex gap-2 mt-2">
+            <div class="flex gap-2 mt-2">
         <button
           @click="toggleMic"
           class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
@@ -103,6 +129,15 @@ onMounted(async () => {
           </svg>
           {{ isListening ? 'Listening...' : 'Voice' }}
         </button>
+        <select
+          v-model="selectedPriority"
+          class="text-xs bg-zinc-800 text-zinc-400 border border-zinc-700/50 rounded-md px-2 py-1.5 hover:text-zinc-200"
+          title="Priority"
+        >
+          <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
+            {{ p.label }}
+          </option>
+        </select>
         <button
           @click="handleDump"
           class="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/30 px-3 py-1.5 rounded-md hover:bg-sky-500/20 active:bg-sky-500/30 transition-all"
@@ -119,24 +154,34 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto space-y-0.5">
+        <div class="flex-1 overflow-y-auto space-y-0.5">
       <div
-        v-for="task in tasks"
+        v-for="task in sortedTasks"
         :key="task.id"
         class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-default"
         :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
       >
-        <input
+                <input
           type="checkbox"
           :checked="task.done"
           @change="task.done = !task.done; toggleDone(task)"
           class="appearance-none w-4 h-4 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0 mt-0.5"
           :class="{ 'opacity-40': task.done }"
         />
-        <span
-          class="text-sm leading-snug"
-          :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
-        >{{ task.text }}</span>
+        <div class="flex-1 flex items-center gap-2 min-w-0">
+          <span
+            class="text-sm leading-snug flex-1 truncate"
+            :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
+          >{{ task.text }}</span>
+          <button
+            @click="cyclePriority(task)"
+            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 transition-all"
+            :class="PRIORITIES[task.priority]?.badge || 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40'"
+            title="Click to change priority"
+          >
+            {{ PRIORITIES[task.priority]?.label || task.priority }}
+          </button>
+        </div>
       </div>
       <div
         v-if="tasks.length === 0"
@@ -201,6 +246,15 @@ onMounted(async () => {
           </svg>
           {{ isListening ? 'Listening...' : 'Voice' }}
         </button>
+        <select
+          v-model="selectedPriority"
+          class="text-xs bg-zinc-100 text-zinc-500 border border-zinc-200 rounded-md px-2 py-1.5 hover:text-zinc-700"
+          title="Priority"
+        >
+          <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
+            {{ p.label }}
+          </option>
+        </select>
         <button
           @click="handleDump"
           class="text-xs bg-sky-500 text-white px-3 py-1.5 rounded-md hover:bg-sky-600 active:bg-sky-700 transition-all shadow-sm"
@@ -217,9 +271,9 @@ onMounted(async () => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto space-y-0.5">
+        <div class="flex-1 overflow-y-auto space-y-0.5">
       <div
-        v-for="task in tasks"
+        v-for="task in sortedTasks"
         :key="task.id"
         class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
         :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
@@ -231,10 +285,20 @@ onMounted(async () => {
           class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
           :class="{ 'opacity-40': task.done }"
         />
-        <span
-          class="text-sm leading-snug"
-          :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
-        >{{ task.text }}</span>
+        <div class="flex-1 flex items-center gap-2 min-w-0">
+          <span
+            class="text-sm leading-snug flex-1 truncate"
+            :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
+          >{{ task.text }}</span>
+          <button
+            @click="cyclePriority(task)"
+            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 transition-all"
+            :class="PRIORITIES[task.priority]?.badge || 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40'"
+            title="Click to change priority"
+          >
+            {{ PRIORITIES[task.priority]?.label || task.priority }}
+          </button>
+        </div>
       </div>
       <div
         v-if="tasks.length === 0"

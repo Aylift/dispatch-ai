@@ -73,6 +73,32 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('button:has(svg) >> text=Voice')).toBeVisible()
   })
 
+  test('priority selector exists and defaults to medium', async ({ page }) => {
+    const select = page.locator('select')
+    await expect(select).toBeVisible()
+    await expect(select).toHaveValue('3')
+    await expect(select).toContainText('Medium')
+  })
+  test('can create a task with selected priority', async ({ page }) => {
+    const select = page.locator('select')
+    await select.selectOption('1')
+    await page.locator('textarea').fill('urgent task')
+    await page.locator('text=+ Add Task').click()
+    // The priority badge shows in the task row - Critical for priority 1
+    const badge = page.locator('button[title="Click to change priority"]').first()
+    await expect(badge).toContainText('Critical')
+  })
+
+  test('priority badge cycles on click', async ({ page }) => {
+    await page.locator('textarea').fill('cycle me')
+    await page.locator('text=+ Add Task').click()
+    const badge = page.locator('button[title="Click to change priority"]').first()
+    // default priority 3 = Medium
+    await expect(badge).toContainText('Medium')
+    await badge.click()  // 3 -> 4
+    await expect(badge).toContainText('Low')
+  })
+
   test('shows task count', async ({ page }) => {
     // After cleanup, should be 0
     await expect(page.locator('footer')).toContainText('0 tasks')
@@ -84,3 +110,4 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('footer')).toContainText('2 tasks')
   })
 })
+
