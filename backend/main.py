@@ -66,7 +66,7 @@ async def transcribe(file: UploadFile = File(...)):
 
 @app.get("/tasks", response_model=list[TaskOut])
 async def list_tasks(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task).order_by(Task.created_at.desc()))
+    result = await db.execute(select(Task).order_by(Task.id.desc()))
     return result.scalars().all()
 
 

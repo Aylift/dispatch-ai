@@ -228,3 +228,17 @@ frontend/node_modules/
 # Tauri build artifacts
 frontend/src-tauri/gen/
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/
+test-results/
+playwright-report/
+
+# Backend database
+backend/dispatch.db
+frontend/dispatch.db
+*.db
+
+
