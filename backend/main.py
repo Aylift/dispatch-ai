@@ -109,6 +109,15 @@ async def clear_done_tasks(db: AsyncSession = Depends(get_db)):
     await db.commit()
 
 
+@app.delete("/tasks/all", status_code=204)
+async def clear_all_tasks(db: AsyncSession = Depends(get_db)):
+    """Delete every task (used to reset state, e.g. in tests)."""
+    result = await db.execute(select(Task))
+    for task in result.scalars().all():
+        await db.delete(task)
+    await db.commit()
+
+
 @app.delete("/tasks/{task_id}", status_code=204)
 async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Task).where(Task.id == task_id))

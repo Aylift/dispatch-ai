@@ -49,10 +49,8 @@ async function clearDone() {
   tasks.value = tasks.value.filter(t => !t.done)
 }
 
-async function cyclePriority(task) {
-  // cycle 1->2->3->4->5->1
-  const next = (task.priority % 5) + 1
-  const updated = await updateTask(task.id, { priority: next })
+async function changePriority(task, priority) {
+  const updated = await updateTask(task.id, { priority })
   task.priority = updated.priority
 }
 
@@ -170,17 +168,20 @@ onMounted(async () => {
         />
         <div class="flex-1 flex items-center gap-2 min-w-0">
           <span
-            class="text-sm leading-snug flex-1 truncate"
-            :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
+          class="text-sm leading-snug flex-1 truncate"
+          :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
           >{{ task.text }}</span>
-          <button
-            @click="cyclePriority(task)"
-            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 transition-all"
+          <select
+            :value="task.priority"
+            @change="changePriority(task, Number($event.target.value))"
+            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 cursor-pointer transition-all focus:outline-none"
             :class="PRIORITIES[task.priority]?.badge || 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40'"
-            title="Click to change priority"
+            title="Change priority"
           >
-            {{ PRIORITIES[task.priority]?.label || task.priority }}
-          </button>
+            <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
+              {{ p.label }}
+            </option>
+          </select>
         </div>
       </div>
       <div
@@ -284,20 +285,23 @@ onMounted(async () => {
           @change="task.done = !task.done; toggleDone(task)"
           class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
           :class="{ 'opacity-40': task.done }"
-        />
+                />
         <div class="flex-1 flex items-center gap-2 min-w-0">
           <span
             class="text-sm leading-snug flex-1 truncate"
             :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
           >{{ task.text }}</span>
-          <button
-            @click="cyclePriority(task)"
-            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 transition-all"
+          <select
+            :value="task.priority"
+            @change="changePriority(task, Number($event.target.value))"
+            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 cursor-pointer transition-all focus:outline-none"
             :class="PRIORITIES[task.priority]?.badge || 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40'"
-            title="Click to change priority"
+            title="Change priority"
           >
-            {{ PRIORITIES[task.priority]?.label || task.priority }}
-          </button>
+            <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
+              {{ p.label }}
+            </option>
+          </select>
         </div>
       </div>
       <div

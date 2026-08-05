@@ -1,0 +1,78 @@
+services:
+  # Production-style backend (live reload, shared source, persistent volume DB)
+  backend:
+    build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - backend_db:/app/data
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///./data/dispatch.db"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # Frontend (Vite dev server for browser development/testing)
+  frontend:
+    build: ./frontend
+    command: npx vite dev --host 0.0.0.0 --port 5173
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: "http://localhost:8000"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  # Backend unit/API tests (isolated in-memory DB, run once via --profile test)
+  tests-backend:
+    build: ./backend
+    command: pytest -p no:cacheprovider -q
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+    profiles: ["test"]
+
+  # Isolated test backend for E2E (own DB, never the prod dispatch.db)
+  test-backend:
+    build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8100
+    volumes:
+      - ./backend:/app
+      - test_backend_db:/app/e2e_data
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///./e2e_data/test_dispatch.db"
+    ports:
+      - "8100:8100"
+    profiles: ["test"]
+
+  # Playwright E2E tests: runs its own vite (pointed at the isolated test backend)
+  # so test data never touches the prod DB or the dev frontend.
+  tests-e2e:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.e2e
+    command: npx playwright test
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      RUN_LOCAL_E2E: "1"
+      E2E_FRONTEND_URL: "http://localhost:5173"
+      E2E_BACKEND_URL: "http://test-backend:8100"
+    depends_on:
+      - test-backend
+    profiles: ["test"]
+
+volumes:
+  backend_db:
+  test_backend_db:

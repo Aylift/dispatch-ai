@@ -238,6 +238,7 @@ playwright-report/
 
 # Backend database
 backend/dispatch.db
+backend/test_dispatch.db
 frontend/dispatch.db
 *.db
 

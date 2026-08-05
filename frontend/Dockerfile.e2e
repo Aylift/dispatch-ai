@@ -1,0 +1,16 @@
+FROM node:20
+
+WORKDIR /app
+
+# Copy package files and install app dependencies
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# Install Playwright and its Chromium browser
+RUN npx playwright install --with-deps chromium
+
+# Copy source (tests, config)
+COPY . .
+
+# Default: run the E2E tests
+CMD ["npx", "playwright", "test"]

@@ -1,25 +1,20 @@
 import { test, expect } from '@playwright/test'
 
-// Helper to clean all tasks before each test for deterministic results
+// URLs configurable for Docker (tests-e2e) vs local run.
+// Locally the frontend runs on :5173 and the isolated test backend on :8100.
+const FRONTEND_URL = process.env.E2E_FRONTEND_URL || 'http://localhost:5173'
+const TEST_BACKEND_URL = process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8100'
+
+// Clear all tasks via the isolated test backend for deterministic test state
 async function clearAllTasks(page) {
-  // Toggle any unchecked tasks to done, then clear done
-  const checkboxes = page.locator('input[type="checkbox"]')
-  const count = await checkboxes.count()
-  for (let i = 0; i < count; i++) {
-    const cb = checkboxes.nth(i)
-    if (!(await cb.isChecked())) {
-      await cb.check()
-    }
-  }
-  const clearBtn = page.locator('text=Clear done')
-  if (await clearBtn.isVisible()) {
-    await clearBtn.click()
-  }
+  const res = await page.request.delete(`${TEST_BACKEND_URL}/tasks/all`)
+  if (!res.ok()) throw new Error(`Failed to clear tasks: ${res.status()}`)
+  await page.goto(FRONTEND_URL)
 }
 
 test.describe('Dispatch AI - basic UI', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5173')
+    await page.goto(FRONTEND_URL)
     await clearAllTasks(page)
   })
 
@@ -38,7 +33,8 @@ test.describe('Dispatch AI - basic UI', () => {
   test('task appears with checkbox', async ({ page }) => {
     await page.locator('textarea').fill('test task')
     await page.locator('text=+ Add Task').click()
-    const checkbox = page.locator('input[type="checkbox"]').first()
+    const row = page.locator('div', { hasText: 'test task' }).filter({ has: page.locator('input[type="checkbox"]') }).first()
+    const checkbox = row.locator('input[type="checkbox"]')
     await expect(checkbox).toBeVisible()
     await expect(checkbox).not.toBeChecked()
   })
@@ -46,7 +42,8 @@ test.describe('Dispatch AI - basic UI', () => {
   test('can toggle task done', async ({ page }) => {
     await page.locator('textarea').fill('toggle me')
     await page.locator('text=+ Add Task').click()
-    const checkbox = page.locator('input[type="checkbox"]').first()
+    const row = page.locator('div', { hasText: 'toggle me' }).filter({ has: page.locator('input[type="checkbox"]') }).first()
+    const checkbox = row.locator('input[type="checkbox"]')
     await checkbox.check()
     await expect(checkbox).toBeChecked()
   })
@@ -54,7 +51,8 @@ test.describe('Dispatch AI - basic UI', () => {
   test('clear done button appears and works', async ({ page }) => {
     await page.locator('textarea').fill('done task')
     await page.locator('text=+ Add Task').click()
-    const checkbox = page.locator('input[type="checkbox"]').first()
+    const row = page.locator('div', { hasText: 'done task' }).filter({ has: page.locator('input[type="checkbox"]') }).first()
+    const checkbox = row.locator('input[type="checkbox"]')
     await checkbox.check()
     await expect(page.locator('text=Clear done')).toBeVisible()
     await page.locator('text=Clear done').click()
@@ -84,19 +82,26 @@ test.describe('Dispatch AI - basic UI', () => {
     await select.selectOption('1')
     await page.locator('textarea').fill('urgent task')
     await page.locator('text=+ Add Task').click()
-    // The priority badge shows in the task row - Critical for priority 1
-    const badge = page.locator('button[title="Click to change priority"]').first()
-    await expect(badge).toContainText('Critical')
+    // The priority dropdown shows in the task row - value 1 = Critical
+    const taskSelect = page.locator('select[title="Change priority"]').first()
+    await expect(taskSelect).toHaveValue('1')
   })
 
-  test('priority badge cycles on click', async ({ page }) => {
-    await page.locator('textarea').fill('cycle me')
+  test('priority dropdown changes and re-sorts', async ({ page }) => {
+    // Create one task then change its priority
+    await page.locator('textarea').fill('my task')
     await page.locator('text=+ Add Task').click()
-    const badge = page.locator('button[title="Click to change priority"]').first()
-    // default priority 3 = Medium
-    await expect(badge).toContainText('Medium')
-    await badge.click()  // 3 -> 4
-    await expect(badge).toContainText('Low')
+    const taskSelect = page.locator('select[title="Change priority"]').first()
+    // default to Medium (3)
+    await expect(taskSelect).toHaveValue('3')
+    // change to Critical (1)
+    await taskSelect.selectOption('1')
+    await expect(taskSelect).toHaveValue('1')
+    // Create another task - it should sort below the Critical one
+    await page.locator('textarea').fill('second task')
+    await page.locator('text=+ Add Task').click()
+    // Critical task is still first
+    await expect(page.locator('select[title="Change priority"]').nth(0)).toHaveValue('1')
   })
 
   test('shows task count', async ({ page }) => {

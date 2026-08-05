@@ -1,4 +1,4 @@
-﻿# Dispatch AI
+# Dispatch AI
 
 An AI-powered task HUD that turns natural language into actionable tasks, plans, and priorities. Speak your intent, and let the AI break it down, adapt to changes, and keep everything on track.
 
@@ -18,86 +18,58 @@ frontend/    Vue 3 + TailwindCSS + Tauri desktop shell
 tests/       Playwright E2E tests
 ```
 
-## Prerequisites
+Docker Compose cleanly separates the production backend, the browser frontend, and the test environments — each with its own isolated database, so tests never touch your production data.
 
-- **Python 3.10+**
-- **Node.js 18+**
-- **Rust** (for Tauri) — ` winget install Rustlang.Rustup `
-- **Visual Studio C++ Build Tools** (Windows, for Tauri) — ` winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools"`
-
-## Setup
-
-### 1. Backend
+## Quick start (Docker)
 
 ```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
+docker compose up -d backend frontend
 ```
 
-Create `backend/.env`:
+- Backend API:      http://localhost:8000
+- Browser frontend: http://localhost:5173
 
-```
-DEEPSEEK_API_KEY=your_deepseek_api_key
-DEEPGRAM_API_KEY=your_deepgram_api_key
-DEEPGRAM_LANGUAGE=pl
+Config secrets live in backend/.env (see backend/.env.example).
+
+## Services
+
+| service       | purpose                                        | DB           |
+|---------------|------------------------------------------------|--------------|
+| backend       | FastAPI app (uvicorn, live reload)             | dispatch.db  |
+| frontend      | Vite dev server (browser dev)                  | —            |
+| tests-backend | Backend unit/API tests                         | in-memory    |
+| test-backend  | Isolated backend for E2E                       | test DB      |
+| tests-e2e     | Playwright E2E (own vite + test backend)       | test DB      |
+
+## Running tests
+
+```powershell
+# Backend unit/API tests (isolated in-memory DB)
+docker compose --profile test run --rm tests-backend
+
+# Playwright E2E (own vite + isolated test backend on :8100)
+docker compose --profile test run --rm tests-e2e
 ```
 
-### 2. Frontend
+## Cleaning up
+
+```powershell
+docker compose down        # stop containers
+docker compose down -v     # also remove data volumes
+```
+
+## Desktop app (Tauri)
+
+Docker covers the browser frontend + backend. To run the desktop HUD overlay
+(not containerized — it needs local Rust toolchain + system audio):
 
 ```powershell
 cd frontend
 npm install
-npm install -D @playwright/test
-npx playwright install chromium
-```
-
-## Running
-
-### Terminal 1 — Backend
-
-```powershell
-cd backend
-.\.venv\Scripts\activate
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Terminal 2 — Frontend (browser dev)
-
-```powershell
-cd frontend
-npx vite dev --host
-```
-
-Open ` http://localhost:5173 `.
-
-### Terminal 2 — Desktop app (Tauri)
-
-```powershell
-cd frontend
 npx tauri dev
 ```
 
-This launches the floating transparent HUD window.
-
-## Tests
-
-```powershell
-cd frontend
-
-# Run all tests headless
-npx playwright test
-
-# Interactive — visible browser
-npx playwright test --headed
-
-# Debug mode with inspector
-npx playwright test --debug
-
-# Full UI mode (watch runs, re-run individual tests)
-npx playwright test --ui
-```
+Requires Rust and VS C++ Build Tools on Windows.
 
 ## Build a standalone executable
 
@@ -106,4 +78,4 @@ cd frontend
 npx tauri build
 ```
 
-Produces an installer in ` frontend/src-tauri/target/release/bundle/ `.
+Produces an installer in frontend/src-tauri/target/release/bundle/.
