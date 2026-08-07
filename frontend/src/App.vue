@@ -1,12 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { fetchTasks, createTask, updateTask, clearDoneTasks } from './api.js'
+import { fetchTasks, createTask, parseTasks, updateTask, clearDoneTasks } from './api.js'
 import { useVoice } from './useVoice.js'
 
 const theme = ref('dark')
 const brainDump = ref('')
 const tasks = ref([])
 const isListening = ref(false)
+const isParsing = ref(false)
 const selectedPriority = ref(3)
 
 const PRIORITIES = {
@@ -38,6 +39,22 @@ async function handleDump() {
   tasks.value.unshift(task)
   brainDump.value = ''
   selectedPriority.value = 3
+}
+
+// Use the AI agent to turn the dump into one-or-more prioritized tasks.
+async function handleParse() {
+  if (!brainDump.value.trim() || isParsing.value) return
+  isParsing.value = true
+  try {
+    const created = await parseTasks(brainDump.value)
+    tasks.value.unshift(...created)
+    brainDump.value = ''
+    selectedPriority.value = 3
+  } catch (err) {
+    console.error('AI parse failed:', err)
+  } finally {
+    isParsing.value = false
+  }
 }
 
 async function toggleDone(task) {
@@ -125,7 +142,7 @@ onMounted(async () => {
             <path d="M5 10a7 7 0 0114 0"/>
             <path d="M12 19v3M8 22h8"/>
           </svg>
-          {{ isListening ? 'Listening...' : 'Voice' }}
+                    {{ isListening ? 'Listening...' : 'Voice' }}
         </button>
         <select
           v-model="selectedPriority"
@@ -136,6 +153,21 @@ onMounted(async () => {
             {{ p.label }}
           </option>
         </select>
+        <button
+          @click="handleParse"
+          :disabled="isParsing"
+          class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="isParsing
+            ? 'bg-violet-500/20 text-violet-400 border border-violet-500/40 animate-pulse'
+            : 'bg-violet-500/10 text-violet-400 border border-violet-500/30 hover:bg-violet-500/20'"
+          title="Let AI split this into prioritized tasks"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
+            <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/>
+          </svg>
+          {{ isParsing ? 'Parsing...' : 'AI' }}
+        </button>
         <button
           @click="handleDump"
           class="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/30 px-3 py-1.5 rounded-md hover:bg-sky-500/20 active:bg-sky-500/30 transition-all"
@@ -245,7 +277,7 @@ onMounted(async () => {
             <path d="M5 10a7 7 0 0114 0"/>
             <path d="M12 19v3M8 22h8"/>
           </svg>
-          {{ isListening ? 'Listening...' : 'Voice' }}
+                    {{ isListening ? 'Listening...' : 'Voice' }}
         </button>
         <select
           v-model="selectedPriority"
@@ -256,6 +288,21 @@ onMounted(async () => {
             {{ p.label }}
           </option>
         </select>
+        <button
+          @click="handleParse"
+          :disabled="isParsing"
+          class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="isParsing
+            ? 'bg-violet-500/10 text-violet-600 border border-violet-500/30 animate-pulse'
+            : 'bg-violet-500/10 text-violet-600 border border-violet-500/30 hover:bg-violet-500/20'"
+          title="Let AI split this into prioritized tasks"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
+            <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/>
+          </svg>
+          {{ isParsing ? 'Parsing...' : 'AI' }}
+        </button>
         <button
           @click="handleDump"
           class="text-xs bg-sky-500 text-white px-3 py-1.5 rounded-md hover:bg-sky-600 active:bg-sky-700 transition-all shadow-sm"

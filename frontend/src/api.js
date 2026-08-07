@@ -16,6 +16,18 @@ export async function createTask(text, priority = 3) {
   return res.json()
 }
 
+// Send a natural-language dump to the AI agent, which splits it into
+// prioritized tasks and returns the created tasks.
+export async function parseTasks(text) {
+  const res = await fetch(`${BASE}/tasks/parse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) throw new Error('Failed to parse tasks')
+  return res.json()
+}
+
 export async function updateTask(id, data) {
   const res = await fetch(`${BASE}/tasks/${id}`, {
     method: 'PATCH',

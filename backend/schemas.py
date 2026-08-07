@@ -14,6 +14,10 @@ class TaskUpdate(BaseModel):
     priority: Optional[int] = Field(default=None, ge=1, le=5)
 
 
+class TaskParseIn(BaseModel):
+    text: str
+
+
 class TaskOut(BaseModel):
     id: int
     text: str

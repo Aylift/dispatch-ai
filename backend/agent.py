@@ -1,5 +1,6 @@
 from openai import OpenAI
 import httpx
+import json
 from config import settings
 
 deepseek = OpenAI(
@@ -25,3 +26,59 @@ def transcribe_audio(audio_data: bytes, filename: str = "recording.webm") -> str
         response.raise_for_status()
         data = response.json()
         return data["results"]["channels"][0]["alternatives"][0]["transcript"]
+
+
+# Parse prompt: turn a natural-language dump into a structured todo list.
+# Priorities: 1 = Critical, 2 = High, 3 = Medium (default), 4 = Low, 5 = Optional.
+PARSE_SYSTEM_PROMPT = """You are Dispatch, a personal task assistant. Convert the user's natural-language "brain dump" into a concise to-do list.
+
+Rules:
+- Produce a JSON array of tasks. Each item: {"text": string, "priority": int}
+- Split multiple ideas/clauses into separate tasks. One idea = one task.
+- "text" must be a short, actionable task (imperative, no fluff, no dates).
+- "priority" uses 1 (Critical), 2 (High), 3 (Medium), 4 (Low), 5 (Optional).
+- Default any task with no explicit urgency to 3 (Medium).
+- Infer urgency only from explicit signals (e.g. "asap", "urgent", "today", "important" => higher; "someday", "if i have time", "low priority" => lower).
+- Output ONLY the JSON array, nothing else, no markdown."""
+
+
+def parse_tasks(text: str) -> list[dict]:
+    """Parse a natural-language dump into a list of {text, priority} tasks."""
+    if not settings.deepseek_api_key:
+        # No key configured: fall back to a single Medium task so dev still works
+        return [{"text": text.strip(), "priority": 3}]
+
+    try:
+        completion = deepseek.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": PARSE_SYSTEM_PROMPT},
+                {"role": "user", "content": text},
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        )
+        raw = completion.choices[0].message.content or "[]"
+        payload = json.loads(raw)
+        items = payload if isinstance(payload, list) else payload.get("tasks", [])
+    except Exception as exc:
+        print(f"[agent] parse_tasks error: {exc}")
+        return [{"text": text.strip(), "priority": 3}]
+
+    tasks = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        task_text = str(item.get("text", "")).strip()
+        if not task_text:
+            continue
+        # Coerce priority to 1..5, defaulting to 3
+        try:
+            priority = int(item.get("priority", 3))
+        except (TypeError, ValueError):
+            priority = 3
+        tasks.append({"text": task_text, "priority": max(1, min(5, priority))})
+
+    if not tasks:
+        tasks = [{"text": text.strip(), "priority": 3}]
+    return tasks

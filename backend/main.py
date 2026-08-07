@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import init_db, get_db
 from models import Task
-from schemas import TaskCreate, TaskUpdate, TaskOut
-from agent import transcribe_audio
+from schemas import TaskCreate, TaskUpdate, TaskOut, TaskParseIn
+from agent import transcribe_audio, parse_tasks
 from stream_agent import stream_transcribe
 
 
@@ -81,6 +81,23 @@ async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(task)
     return task
+
+
+@app.post("/tasks/parse", response_model=list[TaskOut], status_code=201)
+async def parse_and_create_tasks(body: TaskParseIn, db: AsyncSession = Depends(get_db)):
+    """Parse a natural-language dump into prioritized tasks and create them."""
+    if not body.text.strip():
+        raise HTTPException(400, "text cannot be empty")
+    parsed = parse_tasks(body.text)
+    created = []
+    for item in parsed:
+        task = Task(text=item["text"], priority=item["priority"])
+        db.add(task)
+        created.append(task)
+    await db.commit()
+    for task in created:
+        await db.refresh(task)
+    return created
 
 
 @app.patch("/tasks/{task_id}", response_model=TaskOut)

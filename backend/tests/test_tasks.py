@@ -1,4 +1,10 @@
 from conftest import client
+import main as main_module
+
+
+def _fake_parse(text):
+    # Deterministic fake parser so tests never touch the real DeepSeek API
+    return [{"text": text.strip(), "priority": 3}]
 
 
 def test_empty_task_list(client):
@@ -26,6 +32,47 @@ def test_create_task_with_priority(client):
 def test_create_task_rejects_invalid_priority(client):
     res = client.post("/tasks", json={"text": "bad", "priority": 9})
     assert res.status_code == 422
+
+
+def test_parse_creates_tasks_without_ai_key(client, monkeypatch):
+    monkeypatch.setattr(main_module, "parse_tasks", _fake_parse)
+    res = client.post("/tasks/parse", json={"text": "remember to pay rent"})
+    assert res.status_code == 201
+    data = res.json()
+    assert len(data) == 1
+    assert data[0]["text"] == "remember to pay rent"
+    assert data[0]["priority"] == 3
+
+
+def test_parse_rejects_empty_text(client, monkeypatch):
+    monkeypatch.setattr(main_module, "parse_tasks", _fake_parse)
+    res = client.post("/tasks/parse", json={"text": "   "})
+    assert res.status_code == 400
+
+
+def test_parse_creates_multiple_tasks(client, monkeypatch):
+    def fake(text):
+        return [
+            {"text": "send email", "priority": 1},
+            {"text": "buy groceries", "priority": 3},
+            {"text": "organize desk", "priority": 5},
+        ]
+    monkeypatch.setattr(main_module, "parse_tasks", fake)
+    res = client.post("/tasks/parse", json={"text": "brain dump here"})
+    assert res.status_code == 201
+    data = res.json()
+    assert len(data) == 3
+    assert [t["text"] for t in data] == ["send email", "buy groceries", "organize desk"]
+    assert [t["priority"] for t in data] == [1, 3, 5]
+
+
+def test_parse_isolation(client, monkeypatch):
+    monkeypatch.setattr(main_module, "parse_tasks", _fake_parse)
+    res = client.post("/tasks/parse", json={"text": "clean the garage"})
+    assert res.status_code == 201
+    # Ensure it created the fallback task in isolation (no other tasks)
+    data = client.get("/tasks").json()
+    assert [t["text"] for t in data] == ["clean the garage"]
 
 
 def test_list_tasks_after_create(client):
@@ -90,4 +137,5 @@ def test_clear_done(client):
 def test_delete_nonexistent_task(client):
     res = client.delete("/tasks/99999")
     assert res.status_code == 404
+
 

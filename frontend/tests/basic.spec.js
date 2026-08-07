@@ -104,6 +104,31 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('select[title="Change priority"]').nth(0)).toHaveValue('1')
   })
 
+  test('AI parse splits dump into prioritized tasks', async ({ page }) => {
+    // Mock the AI parse endpoint so the test never calls the real DeepSeek API
+    await page.route('**/tasks/parse', async (route) => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: 1, text: 'Fix the sink', done: false, priority: 2, created_at: '2026-01-01T00:00:00' },
+          { id: 2, text: 'Buy milk ASAP', done: false, priority: 1, created_at: '2026-01-01T00:00:00' },
+          { id: 3, text: 'Organize photos', done: false, priority: 5, created_at: '2026-01-01T00:00:00' },
+        ]),
+      })
+    })
+
+    await page.locator('textarea').fill('fix the sink, buy milk asap and maybe organize photos')
+    await page.getByRole('button', { name: 'AI' }).click()
+
+    // All three tasks appear
+    await expect(page.locator('text=Fix the sink')).toBeVisible()
+    await expect(page.locator('text=Buy milk ASAP')).toBeVisible()
+    await expect(page.locator('text=Organize photos')).toBeVisible()
+    // Input is cleared after parse
+    await expect(page.locator('textarea')).toHaveValue('')
+  })
+
   test('shows task count', async ({ page }) => {
     // After cleanup, should be 0
     await expect(page.locator('footer')).toContainText('0 tasks')
