@@ -71,12 +71,28 @@ async function changePriority(task, priority) {
   task.priority = updated.priority
 }
 
+const voiceBase = ref('')  // text already in the box when a voice session starts
+
 const voice = useVoice({
-  onInterim(text, isFinal) {
-    brainDump.value = text
+  onInterim(text) {
+    // Append the new dictation to whatever was already in the box
+    brainDump.value = voiceBase.value
+      ? `${voiceBase.value} ${text}`.trim()
+      : text
   },
   onStop() {
     isListening.value = false
+    voiceBase.value = ''
+  },
+    onIdleStop() {
+    isListening.value = false
+    voiceBase.value = ''
+  },
+  onError(err) {
+    isListening.value = false
+    voiceBase.value = ''
+    console.error('Voice transcription failed:', err)
+    window.alert('Voice transcription failed. Check your connection and try again.')
   },
 })
 
@@ -84,9 +100,21 @@ function toggleMic() {
   if (isListening.value) {
     voice.stop()
     isListening.value = false
+    voiceBase.value = ''
   } else {
+    // Remember current box content so new dictation is appended, not overwritten
+    voiceBase.value = brainDump.value
     voice.start()
     isListening.value = true
+  }
+}
+
+// While listening, a plain Enter stops recording (does not submit).
+// Ctrl+Enter still submits.
+function onTextareaKeydown(event) {
+  if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && isListening.value) {
+    event.preventDefault()
+    toggleMic()
   }
 }
 
@@ -122,27 +150,31 @@ onMounted(async () => {
 
     <div class="flex-none mb-4">
       <textarea
-        v-model="brainDump"
+                v-model="brainDump"
         @keydown.ctrl.enter="handleDump"
+        @keydown="onTextareaKeydown"
         placeholder="Brain dump here... (Ctrl+Enter to submit)"
         class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
                 rows="3"
       />
+      <div v-if="isListening" class="text-[11px] text-red-400/80 mt-1.5 mb-1 animate-pulse">
+        ● Listening — tap the mic or press Enter when done
+      </div>
             <div class="flex gap-2 mt-2">
         <button
-          @click="toggleMic"
+                    @click="toggleMic"
           class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
           :class="isListening
             ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse'
             : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 hover:border-zinc-600'"
-          :title="isListening ? 'Stop recording' : 'Start voice input'"
+          :title="isListening ? 'Tap to stop recording' : 'Start voice input'"
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="2" width="6" height="11" rx="3"/>
             <path d="M5 10a7 7 0 0114 0"/>
             <path d="M12 19v3M8 22h8"/>
           </svg>
-                    {{ isListening ? 'Listening...' : 'Voice' }}
+                    {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
         <select
           v-model="selectedPriority"
@@ -257,27 +289,31 @@ onMounted(async () => {
 
     <div class="flex-none mb-4">
       <textarea
-        v-model="brainDump"
+                v-model="brainDump"
         @keydown.ctrl.enter="handleDump"
+        @keydown="onTextareaKeydown"
         placeholder="Brain dump here... (Ctrl+Enter to submit)"
         class="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
                 rows="3"
       />
+      <div v-if="isListening" class="text-[11px] text-red-500/80 mt-1.5 mb-1 animate-pulse">
+        ● Listening — tap the mic or press Enter when done
+      </div>
       <div class="flex gap-2 mt-2">
         <button
-          @click="toggleMic"
+                    @click="toggleMic"
           class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all"
           :class="isListening
             ? 'bg-red-500/10 text-red-600 border border-red-500/30 animate-pulse'
             : 'bg-zinc-100 text-zinc-500 border border-zinc-200 hover:text-zinc-700 hover:border-zinc-300'"
-          :title="isListening ? 'Stop recording' : 'Start voice input'"
+          :title="isListening ? 'Tap to stop recording' : 'Start voice input'"
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="2" width="6" height="11" rx="3"/>
             <path d="M5 10a7 7 0 0114 0"/>
             <path d="M12 19v3M8 22h8"/>
           </svg>
-                    {{ isListening ? 'Listening...' : 'Voice' }}
+                    {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
         <select
           v-model="selectedPriority"

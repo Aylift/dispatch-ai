@@ -1,10 +1,9 @@
 const WS_URL = 'ws://localhost:8000/ws/transcribe'
 
-export function useVoice({ onInterim, onStop }) {
+export function useVoice({ onInterim, onStop, onIdleStop, onError }) {
   let mediaRecorder = null
   let ws = null
   let listening = false
-  let doneTimeout = null
 
   async function start() {
     if (listening) return
@@ -14,29 +13,21 @@ export function useVoice({ onInterim, onStop }) {
     ws.binaryType = 'arraybuffer'
 
     ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data)
-      if (msg.stop) {
-        console.log('[voice] received stop signal')
+      let msg
+      try { msg = JSON.parse(event.data) } catch { return }
+      // Backend idle watchdog fired (very long silence). Safe to stop.
+      if (msg.idle_stop) {
         stop()
-        if (onStop) onStop()
+        if (onIdleStop) onIdleStop()
         return
       }
-      if (msg.done) {
-        if (msg.text) onInterim(msg.text, true)
-        if (doneTimeout) clearTimeout(doneTimeout)
-        doneTimeout = setTimeout(() => {
-          stop()
-          if (onStop) onStop()
-        }, 3000)
-      } else if (msg.text) {
-        onInterim(msg.text, false)
-        if (doneTimeout) clearTimeout(doneTimeout)
-        doneTimeout = setTimeout(() => {
-          console.log('[voice] auto-stop timeout (interim)')
-          stop()
-          if (onStop) onStop()
-        }, 5000)
+      // Backend couldn't reach the transcription provider - surface it.
+      if (msg.error) {
+        stop()
+        if (onError) onError(msg.error)
+        return
       }
+      if (msg.text) onInterim(msg.text, !!msg.done)
     }
 
     ws.onopen = async () => {
@@ -59,8 +50,8 @@ export function useVoice({ onInterim, onStop }) {
   }
 
   function stop() {
+    if (!listening) return
     listening = false
-    if (doneTimeout) { clearTimeout(doneTimeout); doneTimeout = null }
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stream?.getTracks().forEach(t => t.stop())
       mediaRecorder.stop()
@@ -73,4 +64,3 @@ export function useVoice({ onInterim, onStop }) {
 
   return { start, stop, isListening: () => listening }
 }
-

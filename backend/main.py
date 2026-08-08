@@ -51,7 +51,10 @@ async def ws_transcribe(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        await close()
+        try:
+            await close()
+        except Exception as exc:
+            print(f"[ws] error closing transcription stream: {exc}")
         if listener_task:
             listener_task.cancel()
 
