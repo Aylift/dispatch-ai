@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { fetchTasks, createTask, parseTasks, updateTask, clearDoneTasks } from './api.js'
 import { useVoice } from './useVoice.js'
+import PriorityMeter from './components/PriorityMeter.vue'
 
 const theme = ref('dark')
 const brainDump = ref('')
@@ -149,13 +150,13 @@ onMounted(async () => {
     </header>
 
     <div class="flex-none mb-4">
-      <textarea
-                v-model="brainDump"
+            <textarea
+        v-model="brainDump"
         @keydown.ctrl.enter="handleDump"
         @keydown="onTextareaKeydown"
         placeholder="Brain dump here... (Ctrl+Enter to submit)"
-        class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
-                rows="3"
+                class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
+        rows="3"
       />
       <div v-if="isListening" class="text-[11px] text-red-400/80 mt-1.5 mb-1 animate-pulse">
         ● Listening — tap the mic or press Enter when done
@@ -176,23 +177,20 @@ onMounted(async () => {
           </svg>
                     {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
-        <select
-          v-model="selectedPriority"
-          class="text-xs bg-zinc-800 text-zinc-400 border border-zinc-700/50 rounded-md px-2 py-1.5 hover:text-zinc-200"
-          title="Priority"
-        >
-          <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
-            {{ p.label }}
-          </option>
-        </select>
+        <PriorityMeter
+                    v-model="selectedPriority"
+                    size="sm"
+                    :light="false"
+                    class="mt-0.5"
+        />
         <button
-          @click="handleParse"
-          :disabled="isParsing"
-          class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          :class="isParsing
-            ? 'bg-violet-500/20 text-violet-400 border border-violet-500/40 animate-pulse'
-            : 'bg-violet-500/10 text-violet-400 border border-violet-500/30 hover:bg-violet-500/20'"
-          title="Let AI split this into prioritized tasks"
+                    @click="handleParse"
+                    :disabled="isParsing"
+                    class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    :class="isParsing
+                      ? 'bg-violet-500/20 text-violet-400 border border-violet-500/40 animate-pulse'
+                      : 'bg-violet-500/10 text-violet-400 border border-violet-500/30 hover:bg-violet-500/20'"
+                    title="Let AI split this into prioritized tasks"
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
@@ -235,17 +233,12 @@ onMounted(async () => {
           class="text-sm leading-snug flex-1 truncate"
           :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
           >{{ task.text }}</span>
-          <select
-            :value="task.priority"
-            @change="changePriority(task, Number($event.target.value))"
-            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 cursor-pointer transition-all focus:outline-none"
-            :class="PRIORITIES[task.priority]?.badge || 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40'"
-            title="Change priority"
-          >
-            <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
-              {{ p.label }}
-            </option>
-          </select>
+                    <PriorityMeter
+            :modelValue="task.priority"
+            size="xs"
+            :light="!isDark"
+            @update:modelValue="changePriority(task, $event)"
+          />
         </div>
       </div>
       <div
@@ -288,13 +281,13 @@ onMounted(async () => {
     </header>
 
     <div class="flex-none mb-4">
-      <textarea
-                v-model="brainDump"
+            <textarea
+        v-model="brainDump"
         @keydown.ctrl.enter="handleDump"
         @keydown="onTextareaKeydown"
         placeholder="Brain dump here... (Ctrl+Enter to submit)"
-        class="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
-                rows="3"
+                class="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
+        rows="3"
       />
       <div v-if="isListening" class="text-[11px] text-red-500/80 mt-1.5 mb-1 animate-pulse">
         ● Listening — tap the mic or press Enter when done
@@ -315,23 +308,20 @@ onMounted(async () => {
           </svg>
                     {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
-        <select
-          v-model="selectedPriority"
-          class="text-xs bg-zinc-100 text-zinc-500 border border-zinc-200 rounded-md px-2 py-1.5 hover:text-zinc-700"
-          title="Priority"
-        >
-          <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
-            {{ p.label }}
-          </option>
-        </select>
+        <PriorityMeter
+                    v-model="selectedPriority"
+                    size="sm"
+                    :light="true"
+                    class="mt-0.5"
+        />
         <button
-          @click="handleParse"
-          :disabled="isParsing"
-          class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          :class="isParsing
-            ? 'bg-violet-500/10 text-violet-600 border border-violet-500/30 animate-pulse'
-            : 'bg-violet-500/10 text-violet-600 border border-violet-500/30 hover:bg-violet-500/20'"
-          title="Let AI split this into prioritized tasks"
+                    @click="handleParse"
+                    :disabled="isParsing"
+                    class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    :class="isParsing
+                      ? 'bg-violet-500/10 text-violet-600 border border-violet-500/30 animate-pulse'
+                      : 'bg-violet-500/10 text-violet-600 border border-violet-500/30 hover:bg-violet-500/20'"
+                    title="Let AI split this into prioritized tasks"
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
@@ -374,17 +364,12 @@ onMounted(async () => {
             class="text-sm leading-snug flex-1 truncate"
             :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
           >{{ task.text }}</span>
-          <select
-            :value="task.priority"
-            @change="changePriority(task, Number($event.target.value))"
-            class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 cursor-pointer transition-all focus:outline-none"
-            :class="PRIORITIES[task.priority]?.badge || 'bg-zinc-500/15 text-zinc-400 border-zinc-500/40'"
-            title="Change priority"
-          >
-            <option v-for="(p, key) in PRIORITIES" :key="key" :value="Number(key)">
-              {{ p.label }}
-            </option>
-          </select>
+                    <PriorityMeter
+            :modelValue="task.priority"
+            size="xs"
+            :light="!isDark"
+            @update:modelValue="changePriority(task, $event)"
+          />
         </div>
       </div>
       <div

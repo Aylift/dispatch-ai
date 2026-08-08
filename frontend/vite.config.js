@@ -14,6 +14,13 @@ export default defineConfig({
     headers: {
       "Access-Control-Allow-Origin": "*",
     },
+    // Watch in polling mode so edits from the host trigger HMR reliably.
+    // Native file watchers don't propagate events across Docker bind mounts
+    // on Windows, which is why hot reload silently stopped working.
+    watch: {
+      usePolling: true,
+      interval: 300,
+    },
   },
   // Env variables starting with TAURI_ are exposed to tauri's source code
   envPrefix: ['VITE_', 'TAURI_'],
@@ -26,3 +33,4 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_DEBUG,
   },
 })
+

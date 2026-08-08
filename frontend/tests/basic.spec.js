@@ -71,37 +71,40 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('button:has(svg) >> text=Voice')).toBeVisible()
   })
 
-  test('priority selector exists and defaults to medium', async ({ page }) => {
-    const select = page.locator('select')
-    await expect(select).toBeVisible()
-    await expect(select).toHaveValue('3')
-    await expect(select).toContainText('Medium')
-  })
-  test('can create a task with selected priority', async ({ page }) => {
-    const select = page.locator('select')
-    await select.selectOption('1')
-    await page.locator('textarea').fill('urgent task')
-    await page.locator('text=+ Add Task').click()
-    // The priority dropdown shows in the task row - value 1 = Critical
-    const taskSelect = page.locator('select[title="Change priority"]').first()
-    await expect(taskSelect).toHaveValue('1')
+  test('priority meter exists and defaults to medium', async ({ page }) => {
+    const meter = page.locator('[data-testid="priority-meter"]').first()
+    await expect(meter).toBeVisible()
+    // The input's priority meter shows "3 (Medium)" in its tooltip
+    await expect(meter).toHaveAttribute('title', /Medium/)
   })
 
-  test('priority dropdown changes and re-sorts', async ({ page }) => {
-    // Create one task then change its priority
+  test('can create a task with selected priority', async ({ page }) => {
+    // Set the input priority to Critical by clicking segment 1 on the toolbar meter
+    await page.locator('[data-testid="priority-meter"]').first()
+      .locator('button[data-priority="1"]').click()
+    await page.locator('textarea').fill('urgent task')
+    await page.locator('text=+ Add Task').click()
+    // The task row shows its meter with priority 1 -> title mentions Critical
+    const taskMeter = page.locator('[data-testid="priority-meter"]').nth(1)
+    await expect(taskMeter).toHaveAttribute('title', /Critical/)
+  })
+
+  test('priority meter changes and re-sorts', async ({ page }) => {
+    // Create one task then change its priority via its meter
     await page.locator('textarea').fill('my task')
     await page.locator('text=+ Add Task').click()
-    const taskSelect = page.locator('select[title="Change priority"]').first()
-    // default to Medium (3)
-    await expect(taskSelect).toHaveValue('3')
-    // change to Critical (1)
-    await taskSelect.selectOption('1')
-    await expect(taskSelect).toHaveValue('1')
+    // Task row meter defaults to Medium (3)
+    const taskMeter0 = page.locator('[data-testid="priority-meter"]').nth(1)
+    await expect(taskMeter0).toHaveAttribute('title', /Medium/)
+    // change to Critical (1) by clicking its segment 1
+    await taskMeter0.locator('button[data-priority="1"]').click()
+    await expect(taskMeter0).toHaveAttribute('title', /Critical/)
     // Create another task - it should sort below the Critical one
     await page.locator('textarea').fill('second task')
     await page.locator('text=+ Add Task').click()
     // Critical task is still first
-    await expect(page.locator('select[title="Change priority"]').nth(0)).toHaveValue('1')
+    await expect(page.locator('[data-testid="priority-meter"]').nth(1)).toHaveAttribute('title', /Critical/)
+    await expect(page.locator('[data-testid="priority-meter"]').nth(2)).toHaveAttribute('title', /Medium/)
   })
 
   test('AI parse splits dump into prioritized tasks', async ({ page }) => {
