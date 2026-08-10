@@ -10,6 +10,7 @@ const tasks = ref([])
 const isListening = ref(false)
 const isParsing = ref(false)
 const selectedPriority = ref(3)
+const sortMode = ref('priority') // 'priority' | 'created'
 
 const PRIORITIES = {
   1: { label: 'Critical', text: 'text-red-400', dot: 'bg-red-500', badge: 'bg-red-500/15 text-red-400 border-red-500/40' },
@@ -21,8 +22,16 @@ const PRIORITIES = {
 
 const isDark = computed(() => theme.value === 'dark')
 
-// Sort tasks: undone first, then by priority (1=highest), then newest
+// Sort tasks: undone first, then by the current sort mode.
+// 'priority': 1=highest first, then newest. 'created': newest first.
 const sortedTasks = computed(() => {
+  if (sortMode.value === 'created') {
+    return [...tasks.value].sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1
+      if (a.created_at !== b.created_at) return new Date(b.created_at) - new Date(a.created_at)
+      return b.id - a.id
+    })
+  }
   return [...tasks.value].sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1
     if (a.priority !== b.priority) return a.priority - b.priority
@@ -159,11 +168,17 @@ onMounted(async () => {
           class="flex-1 bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
           rows="3"
         />
-        <PriorityMeter
-          v-model="selectedPriority"
-          size="sm"
-          :light="false"
-        />
+                <div class="flex flex-col items-center gap-1.5 shrink-0">
+          <span class="text-[9px] uppercase tracking-widest text-zinc-500">Priority</span>
+          <PriorityMeter
+            v-model="selectedPriority"
+            size="sm"
+            :light="false"
+          />
+          <span class="text-[10px] font-medium" :class="PRIORITIES[selectedPriority]?.text">
+            {{ PRIORITIES[selectedPriority]?.label }}
+          </span>
+        </div>
       </div>
       <div v-if="isListening" class="text-[11px] text-red-400/80 mt-1.5 mb-1 animate-pulse">
         ● Listening — tap the mic or press Enter when done
@@ -215,10 +230,12 @@ onMounted(async () => {
       </div>
     </div>
 
-        <div class="flex-1 overflow-y-auto space-y-0.5">
-      <div
+                <div class="flex-1 overflow-y-auto">
+      <TransitionGroup name="list" tag="div" class="space-y-0.5">
+            <div
         v-for="task in sortedTasks"
         :key="task.id"
+        data-testid="task-row"
         class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-default"
         :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
       >
@@ -240,8 +257,9 @@ onMounted(async () => {
             :light="!isDark"
             @update:modelValue="changePriority(task, $event)"
           />
-        </div>
+                </div>
       </div>
+      </TransitionGroup>
       <div
         v-if="tasks.length === 0"
         class="flex flex-col items-center justify-center py-12 text-zinc-600"
@@ -252,7 +270,22 @@ onMounted(async () => {
       </div>
     </div>
 
-    <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-700/50 text-[11px] text-zinc-600">
+                <div class="flex-none flex items-center gap-1 pt-2 pb-3 text-[11px]">
+                  <span class="text-zinc-500 mr-1">sort</span>
+                  <button
+                    data-testid="sort-priority"
+                    @click="sortMode = 'priority'"
+                    class="px-1.5 py-0.5 rounded transition-colors"
+                    :class="sortMode === 'priority' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+                  >Priority</button>
+                  <button
+                    data-testid="sort-created"
+                    @click="sortMode = 'created'"
+                    class="px-1.5 py-0.5 rounded transition-colors"
+                    :class="sortMode === 'created' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+                  >Created</button>
+                </div>
+                <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-700/50 text-[11px] text-zinc-600">
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span class="text-zinc-700">Ctrl+Enter to submit</span>
     </footer>
@@ -291,11 +324,17 @@ onMounted(async () => {
           class="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
           rows="3"
         />
-        <PriorityMeter
-          v-model="selectedPriority"
-          size="sm"
-          :light="true"
-        />
+                <div class="flex flex-col items-center gap-1.5 shrink-0">
+          <span class="text-[9px] uppercase tracking-widest text-zinc-400">Priority</span>
+          <PriorityMeter
+            v-model="selectedPriority"
+            size="sm"
+            :light="true"
+          />
+          <span class="text-[10px] font-medium" :class="PRIORITIES[selectedPriority]?.text">
+            {{ PRIORITIES[selectedPriority]?.label }}
+          </span>
+        </div>
       </div>
       <div v-if="isListening" class="text-[11px] text-red-500/80 mt-1.5 mb-1 animate-pulse">
         ● Listening — tap the mic or press Enter when done
@@ -347,10 +386,12 @@ onMounted(async () => {
       </div>
     </div>
 
-        <div class="flex-1 overflow-y-auto space-y-0.5">
-      <div
+                <div class="flex-1 overflow-y-auto">
+      <TransitionGroup name="list" tag="div" class="space-y-0.5">
+            <div
         v-for="task in sortedTasks"
         :key="task.id"
+        data-testid="task-row"
         class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
         :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
       >
@@ -372,8 +413,9 @@ onMounted(async () => {
             :light="!isDark"
             @update:modelValue="changePriority(task, $event)"
           />
-        </div>
+                </div>
       </div>
+      </TransitionGroup>
       <div
         v-if="tasks.length === 0"
         class="flex flex-col items-center justify-center py-12 text-zinc-300"
@@ -384,7 +426,22 @@ onMounted(async () => {
       </div>
     </div>
 
-    <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-200/80 text-[11px] text-zinc-400">
+                <div class="flex-none flex items-center gap-1 pt-2 pb-3 text-[11px]">
+                  <span class="text-zinc-400 mr-1">sort</span>
+                  <button
+                    data-testid="sort-priority"
+                    @click="sortMode = 'priority'"
+                    class="px-1.5 py-0.5 rounded transition-colors"
+                    :class="sortMode === 'priority' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+                  >Priority</button>
+                  <button
+                    data-testid="sort-created"
+                    @click="sortMode = 'created'"
+                    class="px-1.5 py-0.5 rounded transition-colors"
+                    :class="sortMode === 'created' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+                  >Created</button>
+                </div>
+                <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-200/80 text-[11px] text-zinc-400">
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span class="text-zinc-300">Ctrl+Enter to submit</span>
     </footer>

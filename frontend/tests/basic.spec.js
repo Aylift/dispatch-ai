@@ -107,6 +107,53 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('[data-testid="priority-meter"]').nth(2)).toHaveAttribute('title', /Medium/)
   })
 
+  test('sort toggle defaults to Priority', async ({ page }) => {
+    await page.locator('textarea').fill('sortable')
+    await page.locator('text=+ Add Task').click()
+    // The active sort option (Priority) is highlit while Created is muted
+    const created = page.locator('[data-testid="sort-created"]')
+    await expect(created).toBeVisible()
+  })
+
+  test('sorting by Created shows newest first', async ({ page }) => {
+    // Create two tasks; newest should win in 'created' mode
+    await page.locator('textarea').fill('older task')
+    await page.locator('text=+ Add Task').click()
+    await page.locator('textarea').fill('newer task')
+    await page.locator('text=+ Add Task').click()
+
+    // Switch to created-descending sort
+    await page.locator('[data-testid="sort-created"]').click()
+
+    const rows = page.locator('[data-testid="task-row"]')
+    await expect(rows).toHaveCount(2)
+    // First row should be the most recently created
+    await expect(rows.nth(0)).toContainText('newer task')
+    await expect(rows.nth(1)).toContainText('older task')
+  })
+
+  test('toggling back to Priority sorts by priority', async ({ page }) => {
+    // Create a Critical task first (older), then a Medium task (newer).
+    await page.locator('[data-testid="priority-meter"]').first()
+      .locator('button[data-priority="1"]').click()
+    await page.locator('textarea').fill('critical old task')
+    await page.locator('text=+ Add Task').click()
+    await page.locator('textarea').fill('medium new task')
+    await page.locator('text=+ Add Task').click()
+
+    // In 'created' mode the newest (medium) is on top.
+    await page.locator('[data-testid="sort-created"]').click()
+    let rows = page.locator('[data-testid="task-row"]')
+    await expect(rows.nth(0)).toContainText('medium new task')
+    await expect(rows.nth(1)).toContainText('critical old task')
+
+    // Switch back to 'priority' -> Critical (higher priority) surfaces on top.
+    await page.locator('[data-testid="sort-priority"]').click()
+    rows = page.locator('[data-testid="task-row"]')
+    await expect(rows.nth(0)).toContainText('critical old task')
+    await expect(rows.nth(1)).toContainText('medium new task')
+  })
+
   test('AI parse splits dump into prioritized tasks', async ({ page }) => {
     // Mock the AI parse endpoint so the test never calls the real DeepSeek API
     await page.route('**/tasks/parse', async (route) => {
