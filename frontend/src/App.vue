@@ -149,15 +149,22 @@ onMounted(async () => {
       </button>
     </header>
 
-    <div class="flex-none mb-4">
-            <textarea
-        v-model="brainDump"
-        @keydown.ctrl.enter="handleDump"
-        @keydown="onTextareaKeydown"
-        placeholder="Brain dump here... (Ctrl+Enter to submit)"
-                class="w-full bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
-        rows="3"
-      />
+        <div class="flex-none mb-4">
+      <div class="flex items-center gap-3">
+        <textarea
+          v-model="brainDump"
+          @keydown.ctrl.enter="handleDump"
+          @keydown="onTextareaKeydown"
+          placeholder="Brain dump here... (Ctrl+Enter to submit)"
+          class="flex-1 bg-zinc-800/80 border border-zinc-700/60 rounded-lg p-3 text-sm text-zinc-200 placeholder-zinc-500 resize-none focus:outline-none focus:border-sky-500/50 focus:ring-1 focus:ring-sky-500/20 transition-all"
+          rows="3"
+        />
+        <PriorityMeter
+          v-model="selectedPriority"
+          size="sm"
+          :light="false"
+        />
+      </div>
       <div v-if="isListening" class="text-[11px] text-red-400/80 mt-1.5 mb-1 animate-pulse">
         ● Listening — tap the mic or press Enter when done
       </div>
@@ -177,12 +184,6 @@ onMounted(async () => {
           </svg>
                     {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
-        <PriorityMeter
-                    v-model="selectedPriority"
-                    size="sm"
-                    :light="false"
-                    class="mt-0.5"
-        />
         <button
                     @click="handleParse"
                     :disabled="isParsing"
@@ -196,9 +197,9 @@ onMounted(async () => {
             <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
             <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/>
           </svg>
-          {{ isParsing ? 'Parsing...' : 'AI' }}
+          {{ isParsing ? 'Parsing...' : 'Organize' }}
         </button>
-        <button
+                <button
           @click="handleDump"
           class="text-xs bg-sky-500/10 text-sky-400 border border-sky-500/30 px-3 py-1.5 rounded-md hover:bg-sky-500/20 active:bg-sky-500/30 transition-all"
         >
@@ -280,15 +281,22 @@ onMounted(async () => {
       </button>
     </header>
 
-    <div class="flex-none mb-4">
-            <textarea
-        v-model="brainDump"
-        @keydown.ctrl.enter="handleDump"
-        @keydown="onTextareaKeydown"
-        placeholder="Brain dump here... (Ctrl+Enter to submit)"
-                class="w-full bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
-        rows="3"
-      />
+        <div class="flex-none mb-4">
+      <div class="flex items-center gap-3">
+        <textarea
+          v-model="brainDump"
+          @keydown.ctrl.enter="handleDump"
+          @keydown="onTextareaKeydown"
+          placeholder="Brain dump here... (Ctrl+Enter to submit)"
+          class="flex-1 bg-zinc-50 border border-zinc-200 rounded-lg p-3 text-sm text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/20 transition-all"
+          rows="3"
+        />
+        <PriorityMeter
+          v-model="selectedPriority"
+          size="sm"
+          :light="true"
+        />
+      </div>
       <div v-if="isListening" class="text-[11px] text-red-500/80 mt-1.5 mb-1 animate-pulse">
         ● Listening — tap the mic or press Enter when done
       </div>
@@ -308,12 +316,6 @@ onMounted(async () => {
           </svg>
                     {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
-        <PriorityMeter
-                    v-model="selectedPriority"
-                    size="sm"
-                    :light="true"
-                    class="mt-0.5"
-        />
         <button
                     @click="handleParse"
                     :disabled="isParsing"
@@ -327,9 +329,9 @@ onMounted(async () => {
             <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
             <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/>
           </svg>
-          {{ isParsing ? 'Parsing...' : 'AI' }}
+          {{ isParsing ? 'Parsing...' : 'Organize' }}
         </button>
-        <button
+                <button
           @click="handleDump"
           class="text-xs bg-sky-500 text-white px-3 py-1.5 rounded-md hover:bg-sky-600 active:bg-sky-700 transition-all shadow-sm"
         >

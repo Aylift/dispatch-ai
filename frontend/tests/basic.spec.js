@@ -122,7 +122,7 @@ test.describe('Dispatch AI - basic UI', () => {
     })
 
     await page.locator('textarea').fill('fix the sink, buy milk asap and maybe organize photos')
-    await page.getByRole('button', { name: 'AI' }).click()
+    await page.getByRole('button', { name: 'Organize' }).click()
 
     // All three tasks appear
     await expect(page.locator('text=Fix the sink')).toBeVisible()
