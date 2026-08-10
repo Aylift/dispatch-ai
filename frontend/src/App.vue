@@ -230,7 +230,7 @@ onMounted(async () => {
       </div>
     </div>
 
-                <div class="flex-1 overflow-y-auto">
+                                                                <div class="flex-1 overflow-y-auto">
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
             <div
         v-for="task in sortedTasks"
@@ -259,33 +259,33 @@ onMounted(async () => {
           />
                 </div>
       </div>
-      </TransitionGroup>
+            </TransitionGroup>
+            <div class="flex items-center justify-center gap-1 py-2 text-[11px] px-1">
+              <span class="text-zinc-500 mr-1">sort</span>
+              <button
+                data-testid="sort-priority"
+                @click="sortMode = 'priority'"
+                class="px-1.5 py-0.5 rounded transition-colors"
+                :class="sortMode === 'priority' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+              >Priority</button>
+              <button
+                data-testid="sort-created"
+                @click="sortMode = 'created'"
+                class="px-1.5 py-0.5 rounded transition-colors"
+                :class="sortMode === 'created' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+              >Created</button>
+            </div>
       <div
         v-if="tasks.length === 0"
         class="flex flex-col items-center justify-center py-12 text-zinc-600"
       >
         <span class="text-2xl mb-2 opacity-30">◇</span>
         <p class="text-sm">No tasks yet</p>
-        <p class="text-xs text-zinc-700 mt-1">Type something above to get started</p>
+                <p class="text-xs text-zinc-700 mt-1">Type something above to get started</p>
       </div>
     </div>
 
-                <div class="flex-none flex items-center gap-1 pt-2 pb-3 text-[11px]">
-                  <span class="text-zinc-500 mr-1">sort</span>
-                  <button
-                    data-testid="sort-priority"
-                    @click="sortMode = 'priority'"
-                    class="px-1.5 py-0.5 rounded transition-colors"
-                    :class="sortMode === 'priority' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-                  >Priority</button>
-                  <button
-                    data-testid="sort-created"
-                    @click="sortMode = 'created'"
-                    class="px-1.5 py-0.5 rounded transition-colors"
-                    :class="sortMode === 'created' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-                  >Created</button>
-                </div>
-                <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-700/50 text-[11px] text-zinc-600">
+        <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-700/50 text-[11px] text-zinc-600">
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span class="text-zinc-700">Ctrl+Enter to submit</span>
     </footer>
@@ -386,7 +386,7 @@ onMounted(async () => {
       </div>
     </div>
 
-                <div class="flex-1 overflow-y-auto">
+                                                                <div class="flex-1 overflow-y-auto">
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
             <div
         v-for="task in sortedTasks"
@@ -415,33 +415,33 @@ onMounted(async () => {
           />
                 </div>
       </div>
-      </TransitionGroup>
+            </TransitionGroup>
+            <div class="flex items-center justify-center gap-1 py-2 text-[11px] px-1">
+              <span class="text-zinc-400 mr-1">sort</span>
+              <button
+                data-testid="sort-priority"
+                @click="sortMode = 'priority'"
+                class="px-1.5 py-0.5 rounded transition-colors"
+                :class="sortMode === 'priority' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+              >Priority</button>
+              <button
+                data-testid="sort-created"
+                @click="sortMode = 'created'"
+                class="px-1.5 py-0.5 rounded transition-colors"
+                :class="sortMode === 'created' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+              >Created</button>
+            </div>
       <div
         v-if="tasks.length === 0"
         class="flex flex-col items-center justify-center py-12 text-zinc-300"
       >
         <span class="text-2xl mb-2 opacity-40">◇</span>
         <p class="text-sm text-zinc-400">No tasks yet</p>
-        <p class="text-xs text-zinc-300 mt-1">Type something above to get started</p>
+                <p class="text-xs text-zinc-300 mt-1">Type something above to get started</p>
       </div>
     </div>
 
-                <div class="flex-none flex items-center gap-1 pt-2 pb-3 text-[11px]">
-                  <span class="text-zinc-400 mr-1">sort</span>
-                  <button
-                    data-testid="sort-priority"
-                    @click="sortMode = 'priority'"
-                    class="px-1.5 py-0.5 rounded transition-colors"
-                    :class="sortMode === 'priority' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
-                  >Priority</button>
-                  <button
-                    data-testid="sort-created"
-                    @click="sortMode = 'created'"
-                    class="px-1.5 py-0.5 rounded transition-colors"
-                    :class="sortMode === 'created' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
-                  >Created</button>
-                </div>
-                <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-200/80 text-[11px] text-zinc-400">
+        <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-200/80 text-[11px] text-zinc-400">
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span class="text-zinc-300">Ctrl+Enter to submit</span>
     </footer>
