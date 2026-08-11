@@ -18,28 +18,41 @@ frontend/    Vue 3 + TailwindCSS + Tauri desktop shell
 tests/       Playwright E2E tests
 ```
 
-Docker Compose cleanly separates the production backend, the browser frontend, and the test environments — each with its own isolated database, so tests never touch your production data.
+Docker Compose runs the production backend and the isolated test environments — each with its own database, so tests never touch your production data. The frontend is **not** containerized: it runs natively on your host (needed for instant Vite hot-reload and later for the Tauri desktop shell).
 
-## Quick start (Docker)
+## Quick start
+
+**1. Start the backend (Docker):**
 
 ```powershell
-docker compose up -d backend frontend
+docker compose up -d backend
 ```
 
-- Backend API:      http://localhost:8000
-- Browser frontend: http://localhost:5173
+- Backend API: http://localhost:8000
 
 Config secrets live in backend/.env (see backend/.env.example).
 
+**2. Start the frontend (host Vite dev server):**
+
+```powershell
+cd frontend
+npm install
+VITE_API_URL=http://localhost:8000 npm run dev
+```
+
+- Browser frontend: http://localhost:5173
+
+Vite runs on the host so hot reload uses native file events (no slow polling
+over Docker bind mounts).
+
 ## Services
 
-| service       | purpose                                        | DB           |
-|---------------|------------------------------------------------|--------------|
-| backend       | FastAPI app (uvicorn, live reload)             | dispatch.db  |
-| frontend      | Vite dev server (browser dev)                  | —            |
-| tests-backend | Backend unit/API tests                         | in-memory    |
-| test-backend  | Isolated backend for E2E                       | test DB      |
-| tests-e2e     | Playwright E2E (own vite + test backend)       | test DB      |
+| service       | purpose                                              | DB           |
+|---------------|------------------------------------------------------|--------------|
+| backend       | FastAPI app (uvicorn, live reload)                   | dispatch.db  |
+| tests-backend | Backend unit/API tests                               | in-memory    |
+| test-backend  | Isolated backend for E2E                             | test DB      |
+| tests-e2e     | Playwright E2E (own vite + test backend, in Docker)  | test DB      |
 
 ## Running tests
 
@@ -60,8 +73,8 @@ docker compose down -v     # also remove data volumes
 
 ## Desktop app (Tauri)
 
-Docker covers the browser frontend + backend. To run the desktop HUD overlay
-(not containerized — it needs local Rust toolchain + system audio):
+The frontend runs on the host, so the Tauri desktop HUD overlay shares the same
+source — no Docker involved (it needs local Rust toolchain + system audio):
 
 ```powershell
 cd frontend

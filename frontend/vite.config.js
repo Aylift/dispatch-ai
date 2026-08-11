@@ -7,19 +7,12 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   // prevent vite from obscuring rust errors
   clearScreen: false,
-  server: {
+    server: {
     // Tauri expects a fixed port; fail if that port isn't available
     strictPort: true,
     // add connection header for tauri
     headers: {
       "Access-Control-Allow-Origin": "*",
-    },
-    // Watch in polling mode so edits from the host trigger HMR reliably.
-    // Native file watchers don't propagate events across Docker bind mounts
-    // on Windows, which is why hot reload silently stopped working.
-    watch: {
-      usePolling: true,
-      interval: 300,
     },
   },
   // Env variables starting with TAURI_ are exposed to tauri's source code

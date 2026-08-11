@@ -14,20 +14,6 @@ services:
       - "8000:8000"
     restart: unless-stopped
 
-  # Frontend (Vite dev server for browser development/testing)
-  frontend:
-    build: ./frontend
-    command: npx vite dev --host 0.0.0.0 --port 5173
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      VITE_API_URL: "http://localhost:8000"
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
-
   # Backend unit/API tests (isolated in-memory DB, run once via --profile test)
   tests-backend:
     build: ./backend
