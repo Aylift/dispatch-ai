@@ -1,11 +1,14 @@
 services:
-  # Production-style backend (live reload, shared source, persistent volume DB)
+  # Production-style backend (live reload, shared source, persistent DB)
+  # The SQLite DB lives on the Windows host at ${DISPATCH_DATA_DIR}
+  # (default C:\Users\adamm\.dispatch-ai), OUTSIDE the project repo, so it
+  # survives `docker compose down -v` and is easy to back up with scripts/backup.ps1.
   backend:
     build: ./backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
-      - backend_db:/app/data
+      - ${DISPATCH_DATA_DIR}:/app/data
     env_file:
       - ./backend/.env
     environment:
@@ -60,5 +63,4 @@ services:
     profiles: ["test"]
 
 volumes:
-  backend_db:
   test_backend_db:
