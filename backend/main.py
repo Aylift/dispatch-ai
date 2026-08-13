@@ -23,8 +23,12 @@ app = FastAPI(title="Dispatch AI", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "tauri://localhost"],
-    allow_credentials=True,
+    # Wildcard origin: the frontend runs in the browser dev server (:5173) and
+    # inside the Tauri webview (tauri://localhost / custom protocol), both of
+    # which send different Origin values. The API uses no cookies/auth, so
+    # wildcard + no-credentials is safe and avoids CORS preflight 400s.
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

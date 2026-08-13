@@ -14,11 +14,11 @@
       {
         "title": "Dispatch AI",
         "label": "main",
-        "width": 600,
-        "height": 400,
+        "width": 440,
+        "height": 800,
         "resizable": true,
         "fullscreen": false,
-        "alwaysOnTop": true,
+        "alwaysOnTop": false,
         "decorations": false,
         "transparent": true,
         "skipTaskbar": true,
@@ -42,3 +42,4 @@
     ]
   }
 }
+

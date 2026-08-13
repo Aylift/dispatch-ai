@@ -6,7 +6,7 @@ An AI-powered task HUD that turns natural language into actionable tasks, plans,
 
 - **Voice input** — click the mic, speak, and your words get transcribed in real time into the text area (Deepgram streaming STT)
 - **Natural language parsing** — an LLM (DeepSeek) parses transcription into structured tasks with priorities and categories
-- **Floating HUD window** — a transparent, always-on-top, frameless desktop overlay built with Tauri
+- **Floating HUD window** — a transparent, frameless desktop overlay built with Tauri. It's a normal draggable window that stays on top only while it has focus.
 - **Task management** — add tasks with Ctrl+Enter, toggle completion, clear done items, counts displayed live
 - **Dark/light themes**
 
@@ -128,6 +128,15 @@ npx tauri dev
 
 Requires Rust and VS C++ Build Tools on Windows.
 
+The Desktop HUD window is a normal draggable window (frameless + skip-taskbar);
+it can be moved around and behaves like any other window. The header has:
+- a **theme toggle** (dark/light), and
+- a **hide (—)** button that collapses the HUD into the system tray.
+
+A **system tray icon** can also restore or exit the app — left-clicking it
+reopens the HUD, right-clicking it shows a Show / Hide / Quit menu — since the
+frameless, skip-taskbar HUD has no taskbar presence of its own.
+
 ## Build a standalone executable
 
 ```powershell
@@ -135,4 +144,7 @@ cd frontend
 npx tauri build
 ```
 
-Produces an installer in frontend/src-tauri/target/release/bundle/.
+Produces an installer in frontend/src-tauri/target/release/bundle/. Both a
+`.msi` and an `.exe` installer are produced by default; the `.exe` (NSIS)
+offers an install-folder + shortcut wizard, the `.msi` is a silent, scriptable
+Windows Installer package. Pick one with `npx tauri build --bundles nsis|msi`.

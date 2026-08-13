@@ -3,6 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { fetchTasks, createTask, parseTasks, updateTask, clearDoneTasks } from './api.js'
 import { useVoice } from './useVoice.js'
 import PriorityMeter from './components/PriorityMeter.vue'
+import { invoke } from '@tauri-apps/api/core'
+
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 const theme = ref('dark')
 const brainDump = ref('')
@@ -41,6 +44,17 @@ const sortedTasks = computed(() => {
 
 function toggleTheme() {
   theme.value = theme.value === 'dark' ? 'light' : 'dark'
+}
+
+// Hide the HUD into the system tray (frameless + skip-taskbar, so the tray is
+// the way back in). Calls the Rust `hide_window` command.
+async function hideHud() {
+  if (!isTauri) return
+  try {
+    await invoke('hide_window')
+  } catch (err) {
+    console.error('hide_window failed:', err)
+  }
 }
 
 async function handleDump() {
@@ -137,7 +151,7 @@ onMounted(async () => {
   <!-- Dark theme -->
   <div
     v-if="isDark"
-    class="h-screen w-screen bg-zinc-900/95 text-zinc-100 p-5 flex flex-col overflow-hidden select-none"
+        class="h-screen w-screen bg-zinc-900/95 text-zinc-100 p-5 flex flex-col overflow-hidden select-none"
   >
     <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-700/50" data-tauri-drag-region>
       <div>
@@ -146,19 +160,32 @@ onMounted(async () => {
         </h1>
         <p class="text-[11px] text-zinc-500">ai-powered task hud</p>
       </div>
-      <button
-        @click="toggleTheme"
-        class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1.5"
-        title="Switch to light theme"
-      >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="4"/>
-          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-        </svg>
-      </button>
+                                                                                                <div class="flex items-center">
+          <button
+            @click="toggleTheme"
+            class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1.5"
+            title="Switch to light theme"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+          </button>
+          <!-- Hide into tray (Tauri-only), separated to the far side -->
+          <button
+            v-if="isTauri"
+            @click="hideHud"
+            class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700/50"
+            title="Hide HUD (restore from the system tray)"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M5 18.5h14"/>
+            </svg>
+          </button>
+        </div>
     </header>
 
-        <div class="flex-none mb-4">
+            <div class="flex-none mb-4">
       <div class="flex items-center gap-3">
         <textarea
           v-model="brainDump"
@@ -294,7 +321,7 @@ onMounted(async () => {
   <!-- Light theme -->
   <div
     v-else
-    class="h-screen w-screen bg-white/95 text-zinc-800 p-5 flex flex-col overflow-hidden select-none"
+        class="h-screen w-screen bg-white/95 text-zinc-800 p-5 flex flex-col overflow-hidden select-none"
   >
     <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-200/80" data-tauri-drag-region>
       <div>
@@ -303,18 +330,31 @@ onMounted(async () => {
         </h1>
         <p class="text-[11px] text-zinc-400">ai-powered task hud</p>
       </div>
-      <button
-        @click="toggleTheme"
-        class="text-[11px] text-zinc-400 hover:text-zinc-600 transition-colors px-2 py-1 rounded hover:bg-zinc-100 flex items-center gap-1.5"
-        title="Switch to dark theme"
-      >
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-        </svg>
-      </button>
+                                                                                                <div class="flex items-center">
+          <button
+            @click="toggleTheme"
+            class="text-[11px] text-zinc-400 hover:text-zinc-600 transition-colors px-2 py-1 rounded hover:bg-zinc-100 flex items-center gap-1.5"
+            title="Switch to dark theme"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+            </svg>
+          </button>
+          <!-- Hide into tray (Tauri-only), separated to the far side -->
+          <button
+            v-if="isTauri"
+            @click="hideHud"
+            class="text-[11px] text-zinc-400 hover:text-zinc-600 transition-colors px-2 py-1 rounded hover:bg-zinc-100 flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-200"
+            title="Hide HUD (restore from the system tray)"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M5 18.5h14"/>
+            </svg>
+          </button>
+        </div>
     </header>
 
-        <div class="flex-none mb-4">
+            <div class="flex-none mb-4">
       <div class="flex items-center gap-3">
         <textarea
           v-model="brainDump"
@@ -443,7 +483,7 @@ onMounted(async () => {
 
         <footer class="flex-none flex items-center justify-between pt-3 mt-3 border-t border-zinc-200/80 text-[11px] text-zinc-400">
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
-      <span class="text-zinc-300">Ctrl+Enter to submit</span>
+            <span class="text-zinc-300">Ctrl+Enter to submit</span>
     </footer>
   </div>
 </template>
