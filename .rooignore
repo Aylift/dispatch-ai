@@ -1,0 +1,50 @@
+# Roo ignore file - prevents Roo from reading/wasting tokens on generated/build files.
+# These are auto-generated or dependency directories that should never be read.
+
+# ===== Backend (Python) =====
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python bytecode / caches
+__pycache__/
+*.py[codz]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+.coverage
+htmlcov/
+
+# Django migrations (auto-generated schema migrations - not hand-written source)
+**/migrations/
+**/migrations/*.py
+!**/migrations/__init__.py
+
+# Local databases / runtime data
+*.sqlite3
+*.db
+db.sqlite3
+dispatch.db
+
+# ===== Frontend (Node / Vue / Vite) =====
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+.output/
+.nuxt/
+build/
+
+# ===== Tauri / Rust =====
+# Rust build artifacts
+frontend/src-tauri/target/
+
+# ===== Misc generated =====
+*.log
+.DS_Store
