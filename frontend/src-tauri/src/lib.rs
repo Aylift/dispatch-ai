@@ -268,7 +268,7 @@ pub fn run() {
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![hide_window])
+    .invoke_handler(tauri::generate_handler![hide_window, backend_status])
     .build(tauri::generate_context!())
     .expect("error building tauri application")
     .run(|app, event| {
@@ -292,4 +292,21 @@ fn hide_window(app: tauri::AppHandle) {
   }
 }
 
+/// Return diagnostics the HUD can surface when the backend/DB can't be reached.
+/// `log_path` points at the backend log file so the user knows where to look.
+#[tauri::command]
+fn backend_status(app: tauri::AppHandle) -> serde_json::Value {
+  use serde_json::json;
 
+  let running = app
+    .state::<Mutex<Option<BackendProcess>>>()
+    .inner()
+    .lock()
+    .map(|b| b.is_some())
+    .unwrap_or(false);
+
+  json!({
+    "running": running,
+    "log_path": backend_data_dir().join("logs").join("backend.log").display().to_string(),
+  })
+}

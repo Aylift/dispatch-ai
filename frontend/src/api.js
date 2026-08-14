@@ -1,5 +1,27 @@
 const BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
+// Ping backend + DB readiness. 200/ok means the API is up AND the DB is usable.
+export async function checkHealth() {
+  const res = await fetch(`${BASE}/health`, { method: 'GET' })
+  if (!res.ok) return { ok: false, status: res.status }
+  const data = await res.json()
+  return { ok: data.status === 'ok', status: res.status, data }
+}
+
+// Try `fn` repeatedly until it succeeds or timeBudgetMs runs out.
+export async function withRetry(fn, { label = 'request', intervalMs = 1200, timeBudgetMs = 30000 } = {}) {
+  const deadline = Date.now() + timeBudgetMs
+  let lastErr
+  while (Date.now() < deadline) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      await new Promise(r => setTimeout(r, intervalMs))
+    }
+  }
+  throw new Error(`${label} still failing after retries: ${lastErr?.message ?? 'unknown error'}`)
+}
 export async function fetchTasks() {
   const res = await fetch(`${BASE}/tasks`)
   if (!res.ok) throw new Error('Failed to fetch tasks')

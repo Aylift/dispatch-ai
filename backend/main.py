@@ -35,6 +35,23 @@ app.add_middleware(
 
 active_transcriptions = {}
 
+@app.get("/health")
+async def health(db: AsyncSession = Depends(get_db)):
+    """Liveness + readiness. 200 only when the API is up AND the DB is usable.
+
+    The frontend polls this to know when it's safe to load tasks (the backend
+    process + SQLite can take a second or two to come up on a cold start, so
+    we must not just fire one GET /tasks and give up).
+    """
+    try:
+        # Exercise the DB for real so a locked/unavailable DB is reported here
+        # rather than silently failing on the first task load.
+        await db.execute(select(Task.id).limit(1))
+    except Exception as exc:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "degraded", "error": str(exc)})
+    return {"status": "ok", "database": "ok"}
+
 
 @app.websocket("/ws/transcribe")
 async def ws_transcribe(websocket: WebSocket):

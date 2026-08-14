@@ -125,6 +125,21 @@ Get-Content ("$env:USERPROFILE\.dispatch-ai\logs\backend.log") -Wait -Tail 40
 
 > Note: the backend is spawned with `pythonw.exe` and no console, so if you
 > want live terminal output use the manual command instead (see below).
+### Startup & connectivity
+
+The HUD does not silently show an empty screen while the backend/DB is coming
+up. On a cold start (e.g. a PC logon) the backend + SQLite can take a
+second or two, so:
+
+- The HUD shows a **"Loading — starting backend"** banner and **polls the
+  backend GET /health** (which also checks the database) with retries until
+  it's ready, then loads your tasks (also retried).
+- If the backend or DB **cannot** be reached, the HUD shows an **error banner
+  with a "Retry now" button** and tells you where the backend log lives.
+  It never silently gives up — a watchdog keeps re-checking /health in the
+  background and reloads tasks automatically once the backend returns.
+- The backend's DB init also retries transient SQLite "database is locked"
+  errors on startup, so a brief lock from a previous instance won't kill it.
 
 ### Backup
 
