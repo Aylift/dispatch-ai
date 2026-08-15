@@ -116,11 +116,15 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('sorting by Created shows newest first', async ({ page }) => {
-    // Create two tasks; newest should win in 'created' mode
+    // Create two tasks; newest should win in 'created' mode.
+    // Wait for each task row to appear before adding the next, because the
+    // async add clears the textarea when it resolves (would wipe the next input).
     await page.locator('textarea').fill('older task')
     await page.locator('text=+ Add Task').click()
+    await expect(page.locator('[data-testid="task-row"]')).toHaveCount(1)
     await page.locator('textarea').fill('newer task')
     await page.locator('text=+ Add Task').click()
+    await expect(page.locator('[data-testid="task-row"]')).toHaveCount(2)
 
     // Switch to created-descending sort
     await page.locator('[data-testid="sort-created"]').click()
@@ -138,8 +142,10 @@ test.describe('Dispatch AI - basic UI', () => {
       .locator('button[data-priority="1"]').click()
     await page.locator('textarea').fill('critical old task')
     await page.locator('text=+ Add Task').click()
+    await expect(page.locator('[data-testid="task-row"]')).toHaveCount(1)
     await page.locator('textarea').fill('medium new task')
     await page.locator('text=+ Add Task').click()
+    await expect(page.locator('[data-testid="task-row"]')).toHaveCount(2)
 
     // In 'created' mode the newest (medium) is on top.
     await page.locator('[data-testid="sort-created"]').click()

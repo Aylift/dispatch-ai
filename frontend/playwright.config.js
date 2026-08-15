@@ -15,6 +15,9 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   retries: 0,
+  // The first page load triggers a cold Vite compile (can take >30s in Docker),
+  // so allow more headroom than the 30s default.
+  timeout: 60000,
   use: {
     baseURL: 'http://localhost:5173',
     headless: true,
