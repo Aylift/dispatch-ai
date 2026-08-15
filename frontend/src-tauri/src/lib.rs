@@ -189,6 +189,13 @@ fn show_window(win: &WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+      // A second instance was launched: focus the existing HUD window instead
+      // of spawning a new one.
+      if let Some(win) = app.get_webview_window("main") {
+        show_window(&win);
+      }
+    }))
     .plugin(tauri_plugin_autostart::Builder::new().build())
         .setup(|app| {
       // Logging always on. In debug it also prints to stdout; in all builds it
