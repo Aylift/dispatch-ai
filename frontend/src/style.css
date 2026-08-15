@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* Constrain the document to the window so the HUD never scrolls as a whole.
+   The task list scrolls internally (overflow-y-auto); without this, a tall
+   list or short window lets the body/html scroll, producing invisible space
+   and stray left/right scrollbars. */
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Animate task rows when they re-sort (priority change) or appear/vanish.
    .list-move is what makes a task glide up/down as others shift to make room. */
 .list-move {

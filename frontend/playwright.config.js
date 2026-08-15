@@ -15,6 +15,8 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   retries: 0,
+  // Warm up Vite (cold compile) before the first test so page.goto doesn't time out.
+  globalSetup: './tests/global-setup.js',
   // The first page load triggers a cold Vite compile (can take >30s in Docker),
   // so allow more headroom than the 30s default.
   timeout: 60000,
