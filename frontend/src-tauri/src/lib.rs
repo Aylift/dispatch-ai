@@ -186,6 +186,25 @@ fn show_window(win: &WebviewWindow) {
   let _ = win.set_focus();
 }
 
+/// Dock the HUD to the right edge of the primary monitor's work area and make
+/// it as tall as the monitor. Falls back to the configured size if no monitor
+/// is available.
+fn dock_to_right(app: &tauri::AppHandle) {
+  let Some(win) = app.get_webview_window("main") else {
+    return;
+  };
+  let Some(monitor) = win.current_monitor().ok().flatten() else {
+    return;
+  };
+  let work = monitor.work_area();
+  let width = 640.0;
+  let height = work.size.height as f64;
+  let x = work.position.x as f64 + work.size.width as f64 - width;
+  let y = work.position.y as f64;
+  let _ = win.set_size(tauri::PhysicalSize::new(width, height));
+  let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -221,6 +240,9 @@ pub fn run() {
       if let Err(e) = tauri_plugin_autostart::ManagerExt::autolaunch(app).enable() {
         log::warn!("failed to enable autostart: {e}");
       }
+
+      // Dock the HUD to the right edge of the monitor, full height.
+      dock_to_right(app.handle());
 
       // Spawn the backend so the HUD has a running API.
       let backend = BackendProcess::start();

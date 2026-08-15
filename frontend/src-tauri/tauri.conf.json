@@ -14,7 +14,7 @@
       {
         "title": "Dispatch AI",
         "label": "main",
-        "width": 440,
+        "width": 640,
         "height": 800,
         "resizable": true,
         "fullscreen": false,
@@ -23,7 +23,7 @@
         "transparent": true,
         "skipTaskbar": true,
         "shadow": false,
-        "center": true
+        "center": false
       }
     ],
     "security": {
