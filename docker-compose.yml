@@ -5,6 +5,7 @@ services:
   # survives `docker compose down -v` and is easy to back up with scripts/backup.ps1.
   backend:
     build: ./backend
+    image: dispatch-ai-backend:latest
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
@@ -19,7 +20,7 @@ services:
 
   # Backend unit/API tests (isolated in-memory DB, run once via --profile test)
   tests-backend:
-    build: ./backend
+    image: dispatch-ai-backend:latest
     command: pytest -p no:cacheprovider -q
     volumes:
       - ./backend:/app
@@ -31,7 +32,7 @@ services:
 
   # Isolated test backend for E2E (own DB, never the prod dispatch.db)
   test-backend:
-    build: ./backend
+    image: dispatch-ai-backend:latest
     command: uvicorn main:app --host 0.0.0.0 --port 8100
     volumes:
       - ./backend:/app
@@ -40,6 +41,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: "sqlite+aiosqlite:///./e2e_data/test_dispatch.db"
+      TEST_MODE: "1"
     ports:
       - "8100:8100"
     profiles: ["test"]

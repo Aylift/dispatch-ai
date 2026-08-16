@@ -14,6 +14,8 @@ const isListening = ref(false)
 const isParsing = ref(false)
 const selectedPriority = ref(3)
 const sortMode = ref('priority') // 'priority' | 'created'
+const view = ref('today')        // 'all' | 'today' — which tab is shown (TODAY is default)
+const TODAY_TAG = 'TODAY'
 const editingId = ref(null)      // task id currently in title-edit mode
 const editingText = ref('')      // draft text while editing
 let editInputEl = null
@@ -36,6 +38,14 @@ const isDark = computed(() => theme.value === 'dark')
 
 // Sort tasks: undone first, then by the current sort mode.
 // 'priority': 1=highest first, then newest. 'created': newest first.
+const hasTag = (task, tag) => Array.isArray(task.tags) && task.tags.includes(tag)
+
+// Tasks shown in the active tab. 'today' filters to tasks tagged TODAY.
+const visibleTasks = computed(() => {
+  if (view.value === 'today') return sortedTasks.value.filter(t => hasTag(t, TODAY_TAG))
+  return sortedTasks.value
+})
+
 const sortedTasks = computed(() => {
   if (sortMode.value === 'created') {
     return [...tasks.value].sort((a, b) => {
@@ -203,6 +213,22 @@ async function changePriority(task, priority) {
   } catch (err) {
     console.error(err)
     connectionError.value = 'Could not change priority — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+// Toggle the TODAY tag on a task. It stays in the main list but also appears
+// in the TODAY tab.
+async function toggleToday(task) {
+  const tags = hasTag(task, TODAY_TAG)
+    ? task.tags.filter(t => t !== TODAY_TAG)
+    : [...(task.tags || []), TODAY_TAG]
+  try {
+    const updated = await updateTask(task.id, { tags })
+    task.tags = updated.tags
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update task — backend unreachable.'
     appStatus.value = 'error'
   }
 }
@@ -467,9 +493,23 @@ onUnmounted(() => {
     </div>
 
     <div class="flex-1 overflow-y-auto">
+      <div class="flex items-center gap-1 mb-2 text-[11px]">
+        <button
+          data-testid="tab-today"
+          @click="view = 'today'"
+          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+          :class="view === 'today' ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-500 hover:text-zinc-300'"
+        >TODAY</button>
+        <button
+          data-testid="tab-all"
+          @click="view = 'all'"
+          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+          :class="view === 'all' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+        >All</button>
+      </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
         <div
-          v-for="task in sortedTasks"
+          v-for="task in visibleTasks"
           :key="task.id"
           data-testid="task-row"
           class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
@@ -506,6 +546,15 @@ onUnmounted(() => {
               :light="!isDark"
               @update:modelValue="changePriority(task, $event)"
             />
+            <button
+              data-testid="toggle-today"
+              @click="toggleToday(task)"
+              class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+              :class="hasTag(task, TODAY_TAG)
+                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
+              :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
+            >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
           </div>
         </div>
       </TransitionGroup>
@@ -688,9 +737,23 @@ onUnmounted(() => {
     </div>
 
     <div class="flex-1 overflow-y-auto">
+      <div class="flex items-center gap-1 mb-2 text-[11px]">
+        <button
+          data-testid="tab-today"
+          @click="view = 'today'"
+          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+          :class="view === 'today' ? 'bg-sky-500/15 text-sky-600' : 'text-zinc-400 hover:text-zinc-600'"
+        >TODAY</button>
+        <button
+          data-testid="tab-all"
+          @click="view = 'all'"
+          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+          :class="view === 'all' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+        >All</button>
+      </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
         <div
-          v-for="task in sortedTasks"
+          v-for="task in visibleTasks"
           :key="task.id"
           data-testid="task-row"
           class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
@@ -727,6 +790,15 @@ onUnmounted(() => {
               :light="!isDark"
               @update:modelValue="changePriority(task, $event)"
             />
+            <button
+              data-testid="toggle-today"
+              @click="toggleToday(task)"
+              class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+              :class="hasTag(task, TODAY_TAG)
+                ? 'bg-sky-500/15 text-sky-600 border-sky-500/40'
+                : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
+              :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
+            >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
           </div>
         </div>
       </TransitionGroup>

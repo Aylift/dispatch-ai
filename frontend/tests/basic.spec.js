@@ -5,11 +5,19 @@ import { test, expect } from '@playwright/test'
 const FRONTEND_URL = process.env.E2E_FRONTEND_URL || 'http://localhost:5173'
 const TEST_BACKEND_URL = process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8100'
 
-// Clear all tasks via the isolated test backend for deterministic test state
+// Reset schema + data via the isolated test backend for deterministic test state.
+// POST /tasks/reset only exists on the TEST_MODE backend (:8100), never the real one.
 async function clearAllTasks(page) {
-  const res = await page.request.delete(`${TEST_BACKEND_URL}/tasks/all`)
-  if (!res.ok()) throw new Error(`Failed to clear tasks: ${res.status()}`)
+  const res = await page.request.post(`${TEST_BACKEND_URL}/tasks/reset`)
+  if (!res.ok()) throw new Error(`Failed to reset tasks: ${res.status()}`)
   await page.goto(FRONTEND_URL)
+  // TODAY is the default tab on startup; switch to All so the generic tests
+  // (which create untagged tasks) see them. TODAY-specific tests switch tabs
+  // themselves. Wait for the tab to render (app shows a loading state until the
+  // backend health check passes) before clicking.
+  const allTab = page.locator('[data-testid="tab-all"]')
+  await allTab.waitFor({ state: 'visible' })
+  await allTab.click()
 }
 
 test.describe('Dispatch AI - basic UI', () => {
@@ -239,6 +247,48 @@ test.describe('Dispatch AI - basic UI', () => {
 
     await expect(page.locator('text=blur saved')).toBeVisible()
     await expect(page.locator('text=blur me')).not.toBeVisible()
+  })
+
+  test('TODAY tab shows only tagged tasks', async ({ page }) => {
+    await page.locator('textarea').fill('normal task')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=normal task')).toBeVisible()
+
+    await page.locator('textarea').fill('today task')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=today task')).toBeVisible()
+
+    // Tag "today task" via its toggle button
+    const todayTaskRow = page.locator('[data-testid="task-row"]', { hasText: 'today task' })
+    await todayTaskRow.locator('[data-testid="toggle-today"]').click()
+    await expect(todayTaskRow.locator('[data-testid="toggle-today"]')).toContainText('TODAY')
+
+    // Switch to TODAY tab: only the tagged task shows
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=today task')).toBeVisible()
+    await expect(page.locator('text=normal task')).not.toBeVisible()
+  })
+
+  test('untagging removes task from TODAY tab but keeps it in All', async ({ page }) => {
+    await page.locator('textarea').fill('temp today')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=temp today')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'temp today' })
+    await row.locator('[data-testid="toggle-today"]').click()
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('TODAY')
+
+    // Untag it
+    await row.locator('[data-testid="toggle-today"]').click()
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today')
+
+    // TODAY tab is now empty
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=temp today')).not.toBeVisible()
+
+    // Still present in All
+    await page.locator('[data-testid="tab-all"]').click()
+    await expect(page.locator('text=temp today')).toBeVisible()
   })
 })
 

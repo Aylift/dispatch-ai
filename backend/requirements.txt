@@ -9,6 +9,7 @@ python-dotenv>=1.0.0
 websockets>=13.0
 httpx>=0.28.0
 python-multipart>=0.0.9
+alembic>=1.19.0
 
 # Testing
 pytest>=8.0.0

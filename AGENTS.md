@@ -17,6 +17,29 @@ Context for AI coding agents working in this repo.
 | 5173 | Dev vite server (points at :8000). |
 | 5174 | Playwright-managed vite (points at :8100). |
 
+## Port ownership
+
+The **native Tauri app owns `:8000`** — it spawns `backend\.venv\Scripts\pythonw.exe`
+bound to `127.0.0.1:8000` and shadows the Docker `backend` container. The Docker
+`backend` service is only for dev/isolated use. Tests must **never** talk to `:8000`.
+
+## Shared backend image
+
+`backend`, `tests-backend`, and `test-backend` all use the **same** image
+(`dispatch-ai-backend:latest`) built once from `./backend`. This prevents image drift
+(e.g. a stale `test-backend` missing a newly-added dependency). Rebuild with:
+
+```powershell
+docker compose --profile test build
+```
+
+## Test-only reset endpoint
+
+`POST /tasks/reset` drops + recreates the `tasks` table (schema + data reset). It is
+**only registered when `TEST_MODE=1`**, which the isolated `test-backend` (:8100) sets
+and the real backend (:8000) never does. E2E calls it in `beforeEach` for deterministic
+state — no manual DB deletion inside containers.
+
 ## CRITICAL — never let E2E touch the real backend
 
 The E2E suite must read/write **only** the isolated test backend on `:8100`.

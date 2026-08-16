@@ -12,6 +12,7 @@ class TaskUpdate(BaseModel):
     text: Optional[str] = None
     done: Optional[bool] = None
     priority: Optional[int] = Field(default=None, ge=1, le=5)
+    tags: Optional[list[str]] = None
 
 
 class TaskParseIn(BaseModel):
@@ -23,6 +24,7 @@ class TaskOut(BaseModel):
     text: str
     done: bool
     priority: int
+    tags: list[str]
     created_at: datetime
 
     model_config = {"from_attributes": True}

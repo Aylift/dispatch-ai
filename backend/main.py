@@ -1,12 +1,13 @@
 from contextlib import asynccontextmanager
 import json
 import asyncio
+import os
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import init_db, get_db
+from database import init_db, get_db, run_migrations
 from models import Task
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskParseIn
 from agent import transcribe_audio, parse_tasks
@@ -15,6 +16,9 @@ from stream_agent import stream_transcribe, _ts
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # run_migrations is blocking (Alembic manages its own async engine), so run
+    # it in a worker thread to avoid blocking the event loop.
+    await asyncio.to_thread(run_migrations)
     await init_db()
     yield
 
@@ -140,6 +144,8 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         task.done = body.done
     if body.priority is not None:
         task.priority = body.priority
+    if body.tags is not None:
+        task.tags = body.tags
     await db.commit()
     await db.refresh(task)
     return task
@@ -161,6 +167,18 @@ async def clear_all_tasks(db: AsyncSession = Depends(get_db)):
     for task in result.scalars().all():
         await db.delete(task)
     await db.commit()
+
+
+# Test-only endpoint: drops + recreates the tasks table so E2E can reset both
+# schema and data deterministically. Only registered when TEST_MODE=1, which the
+# isolated test backend (:8100) sets and the real backend (:8000) never does.
+if os.environ.get("TEST_MODE") == "1":
+
+    @app.post("/tasks/reset", status_code=204)
+    async def reset_tasks(db: AsyncSession = Depends(get_db)):
+        await db.execute(text("DROP TABLE IF EXISTS tasks"))
+        await db.commit()
+        await init_db()
 
 
 @app.delete("/tasks/{task_id}", status_code=204)

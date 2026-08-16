@@ -112,6 +112,28 @@ def test_update_task(client):
     assert res.json()["done"] is True
 
 
+def test_task_defaults_to_empty_tags(client):
+    created = client.post("/tasks", json={"text": "no tags"}).json()
+    assert created["tags"] == []
+
+
+def test_update_tags(client):
+    created = client.post("/tasks", json={"text": "tag me"}).json()
+    tid = created["id"]
+    res = client.patch(f"/tasks/{tid}", json={"tags": ["TODAY"]})
+    assert res.status_code == 200
+    assert res.json()["tags"] == ["TODAY"]
+
+
+def test_clear_tags(client):
+    created = client.post("/tasks", json={"text": "untag me"}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"tags": ["TODAY"]})
+    res = client.patch(f"/tasks/{tid}", json={"tags": []})
+    assert res.status_code == 200
+    assert res.json()["tags"] == []
+
+
 def test_delete_task(client):
     created = client.post("/tasks", json={"text": "delete me"}).json()
     tid = created["id"]

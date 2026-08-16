@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, func
 from database import Base
 
 
@@ -9,5 +9,6 @@ class Task(Base):
     text = Column(String, nullable=False)
     done = Column(Boolean, default=False, nullable=False)
     priority = Column(Integer, default=3, nullable=False)  # 1=Critical ... 5=Optional
+    tags = Column(JSON, default=list, nullable=False)  # e.g. ["TODAY"]
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
