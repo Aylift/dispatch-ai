@@ -14,6 +14,9 @@ const isListening = ref(false)
 const isParsing = ref(false)
 const selectedPriority = ref(3)
 const sortMode = ref('priority') // 'priority' | 'created'
+const editingId = ref(null)      // task id currently in title-edit mode
+const editingText = ref('')      // draft text while editing
+let editInputEl = null
 
 // Backend/DB connection state: 'loading' = connecting/retrying, 'ready' = up,
 // 'error' = unreachable (backend or DB failed).
@@ -200,6 +203,38 @@ async function changePriority(task, priority) {
   } catch (err) {
     console.error(err)
     connectionError.value = 'Could not change priority — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+// ---- Task title editing (double-click) -----------------------------------
+function startEdit(task) {
+  editingId.value = task.id
+  editingText.value = task.text
+  // Focus + select after the input renders.
+  requestAnimationFrame(() => {
+    if (editInputEl) {
+      editInputEl.focus()
+      editInputEl.select()
+    }
+  })
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editingText.value = ''
+}
+
+async function saveEdit(task) {
+  const text = editingText.value.trim()
+  cancelEdit()
+  if (!text || text === task.text) return
+  try {
+    const updated = await updateTask(task.id, { text })
+    task.text = updated.text
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update task — backend unreachable.'
     appStatus.value = 'error'
   }
 }
@@ -437,7 +472,7 @@ onUnmounted(() => {
           v-for="task in sortedTasks"
           :key="task.id"
           data-testid="task-row"
-          class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-default"
+          class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
           :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
         >
           <input
@@ -448,9 +483,22 @@ onUnmounted(() => {
             :class="{ 'opacity-40': task.done }"
           />
           <div class="flex-1 flex items-center gap-2 min-w-0">
+            <input
+              v-if="editingId === task.id"
+              ref="editInputEl"
+              v-model="editingText"
+              data-testid="task-title-input"
+              @keydown.enter="saveEdit(task)"
+              @keydown.esc="cancelEdit"
+              @blur="saveEdit(task)"
+              class="flex-1 min-w-0 text-sm leading-snug bg-zinc-900 border border-sky-500/60 rounded px-1.5 py-0.5 text-zinc-100 focus:outline-none"
+            />
             <span
+              v-else
+              @dblclick="startEdit(task)"
               class="text-sm leading-snug flex-1 truncate"
               :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
+              :title="'Double-click to edit'"
             >{{ task.text }}</span>
             <PriorityMeter
               :modelValue="task.priority"
@@ -645,7 +693,7 @@ onUnmounted(() => {
           v-for="task in sortedTasks"
           :key="task.id"
           data-testid="task-row"
-          class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
+          class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
           :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
         >
           <input
@@ -656,9 +704,22 @@ onUnmounted(() => {
             :class="{ 'opacity-40': task.done }"
           />
           <div class="flex-1 flex items-center gap-2 min-w-0">
+            <input
+              v-if="editingId === task.id"
+              ref="editInputEl"
+              v-model="editingText"
+              data-testid="task-title-input"
+              @keydown.enter="saveEdit(task)"
+              @keydown.esc="cancelEdit"
+              @blur="saveEdit(task)"
+              class="flex-1 min-w-0 text-sm leading-snug bg-white border border-sky-400/70 rounded px-1.5 py-0.5 text-zinc-800 focus:outline-none"
+            />
             <span
+              v-else
+              @dblclick="startEdit(task)"
               class="text-sm leading-snug flex-1 truncate"
               :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
+              :title="'Double-click to edit'"
             >{{ task.text }}</span>
             <PriorityMeter
               :modelValue="task.priority"

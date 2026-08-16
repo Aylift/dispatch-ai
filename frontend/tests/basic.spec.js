@@ -195,5 +195,50 @@ test.describe('Dispatch AI - basic UI', () => {
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('footer')).toContainText('2 tasks')
   })
+
+  test('double-click enters edit mode and Enter saves new title', async ({ page }) => {
+    await page.locator('textarea').fill('old title')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=old title')).toBeVisible()
+
+    await page.locator('text=old title').dblclick()
+    const input = page.locator('[data-testid="task-title-input"]')
+    await expect(input).toBeVisible()
+    await input.fill('new title')
+    await input.press('Enter')
+
+    await expect(page.locator('text=new title')).toBeVisible()
+    await expect(page.locator('text=old title')).not.toBeVisible()
+  })
+
+  test('Esc cancels edit without saving', async ({ page }) => {
+    await page.locator('textarea').fill('keep me')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=keep me')).toBeVisible()
+
+    await page.locator('text=keep me').dblclick()
+    const input = page.locator('[data-testid="task-title-input"]')
+    await expect(input).toBeVisible()
+    await input.fill('should not save')
+    await input.press('Escape')
+
+    await expect(page.locator('text=keep me')).toBeVisible()
+    await expect(page.locator('text=should not save')).not.toBeVisible()
+  })
+
+  test('blur saves the edited title', async ({ page }) => {
+    await page.locator('textarea').fill('blur me')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=blur me')).toBeVisible()
+
+    await page.locator('text=blur me').dblclick()
+    const input = page.locator('[data-testid="task-title-input"]')
+    await expect(input).toBeVisible()
+    await input.fill('blur saved')
+    await input.blur()
+
+    await expect(page.locator('text=blur saved')).toBeVisible()
+    await expect(page.locator('text=blur me')).not.toBeVisible()
+  })
 })
 
