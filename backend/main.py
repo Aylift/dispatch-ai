@@ -10,7 +10,7 @@ from database import init_db, get_db
 from models import Task
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskParseIn
 from agent import transcribe_audio, parse_tasks
-from stream_agent import stream_transcribe
+from stream_agent import stream_transcribe, _ts
 
 
 @asynccontextmanager
@@ -56,11 +56,13 @@ async def health(db: AsyncSession = Depends(get_db)):
 @app.websocket("/ws/transcribe")
 async def ws_transcribe(websocket: WebSocket):
     await websocket.accept()
+    print(f"[{_ts()}] [ws] connection open")
     send_audio, transcript_gen, close = await stream_transcribe()
     listener_task = None
 
     async def send_transcripts():
         async for msg in transcript_gen:
+            print(f"[{_ts()}] [ws] -> frontend {msg}")
             await websocket.send_json(msg)
 
     listener_task = asyncio.create_task(send_transcripts())
@@ -68,8 +70,10 @@ async def ws_transcribe(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_bytes()
+            print(f"[{_ts()}] [ws] recv {len(data)}B audio")
             await send_audio(data)
     except WebSocketDisconnect:
+        print(f"[{_ts()}] [ws] client disconnected")
         pass
     finally:
         try:

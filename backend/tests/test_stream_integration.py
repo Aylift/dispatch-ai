@@ -28,7 +28,9 @@ def test_deepgram_url_does_not_include_rejected_param():
     assert "utterance_end_ms" not in url
     # The key required params are present
     assert "endpointing" in url
-    assert "vad_events" in url
+    assert "encoding" in url
+    # vad_events is not needed and adds latency; keep it out.
+    assert "vad_events" not in url
 
 
 @needs_key

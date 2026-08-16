@@ -56,7 +56,7 @@ services:
       - /app/node_modules
     environment:
       RUN_LOCAL_E2E: "1"
-      E2E_FRONTEND_URL: "http://localhost:5173"
+      E2E_FRONTEND_URL: "http://localhost:5174"
       E2E_BACKEND_URL: "http://test-backend:8100"
     depends_on:
       - test-backend

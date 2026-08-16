@@ -3,8 +3,11 @@ import { defineConfig } from '@playwright/test'
 // URL configuration:
 //  - E2E_FRONTEND_URL / baseURL where the browser loads the app.
 //  - E2E_BACKEND_URL  the isolated test backend that must be reachable.
-// In local dev, vite runs on :5173 and the isolated test backend on :8100.
-const PORTAL = process.env.E2E_FRONTEND_URL || 'http://localhost:5173'
+// The playwright-managed vite runs on a DEDICATED port (5174) so it never
+// collides with (or reuses) the developer's dev server on :5173, which may be
+// pointed at the real backend (:8000). The isolated test backend runs on :8100.
+const TEST_PORT = 5174
+const PORTAL = process.env.E2E_FRONTEND_URL || `http://localhost:${TEST_PORT}`
 const TEST_BACKEND = process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8100'
 
 // When RUN_LOCAL_E2E=1, start our own vite inside this process so the frontend
@@ -21,16 +24,18 @@ export default defineConfig({
   // so allow more headroom than the 30s default.
   timeout: 60000,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${TEST_PORT}`,
     headless: true,
   },
   webServer: startOwnVite
     ? [
         {
-          command: 'npx vite dev --host 0.0.0.0 --port 5173',
-          port: 5173,
+          command: `npx vite dev --host 0.0.0.0 --port ${TEST_PORT}`,
+          port: TEST_PORT,
           env: { VITE_API_URL: TEST_BACKEND },
-          reuseExistingServer: true,
+          // NEVER reuse a running dev server: it may be pointed at the real
+          // backend (:8000), which would make tests read/write personal data.
+          reuseExistingServer: false,
         },
       ]
     : undefined,

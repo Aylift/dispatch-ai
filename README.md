@@ -80,6 +80,30 @@ docker compose --profile test run --rm tests-backend
 docker compose --profile test run --rm tests-e2e
 ```
 
+### Local E2E (no Docker)
+
+The E2E suite needs the isolated test backend on `:8100` and its own vite on
+`:5174`. Start the test backend, then run with `RUN_LOCAL_E2E=1`:
+
+```powershell
+# 1. Isolated test backend (own DB, never touches your real data)
+docker compose --profile test up -d test-backend
+
+# 2. Run E2E from frontend/
+cd frontend
+$env:RUN_LOCAL_E2E = "1"
+$env:E2E_BACKEND_URL = "http://127.0.0.1:8100"
+$env:E2E_FRONTEND_URL = "http://localhost:5174"
+npx playwright test
+```
+
+> **WARNING — never let E2E hit the real backend.** The playwright-managed vite
+> runs on a dedicated port `:5174` and is forced to point at the isolated test
+> backend (`:8100`). It must **never** reuse your dev server on `:5173`, which
+> is pointed at the real backend (`:8000`) and your personal DB. If the app
+> reads/writes `:8000` during tests, your real tasks get polluted. The config
+> sets `reuseExistingServer: false` to prevent this.
+
 ## Cleaning up
 
 ```powershell
