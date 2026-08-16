@@ -1,11 +1,11 @@
 const WS_URL = 'ws://localhost:8000/ws/transcribe'
 
-export function useVoice({ onInterim, onStop, onIdleStop, onError }) {
+export function useVoice({ onInterim, onStop, onError }) {
   let mediaRecorder = null
   let ws = null
   let listening = false
 
-  async function start() {
+  async function start(deviceId) {
     if (listening) return
     listening = true
 
@@ -15,12 +15,6 @@ export function useVoice({ onInterim, onStop, onIdleStop, onError }) {
     ws.onmessage = (event) => {
       let msg
       try { msg = JSON.parse(event.data) } catch { return }
-      // Backend idle watchdog fired (very long silence). Safe to stop.
-      if (msg.idle_stop) {
-        stop()
-        if (onIdleStop) onIdleStop()
-        return
-      }
       // Backend couldn't reach the transcription provider - surface it.
       if (msg.error) {
         stop()
@@ -32,7 +26,10 @@ export function useVoice({ onInterim, onStop, onIdleStop, onError }) {
 
     ws.onopen = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const constraints = deviceId
+          ? { audio: { deviceId: { exact: deviceId } } }
+          : { audio: true }
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
         mediaRecorder.ondataavailable = (e) => {
           if (e.data.size > 0 && ws?.readyState === WebSocket.OPEN) {

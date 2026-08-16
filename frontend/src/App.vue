@@ -206,6 +206,32 @@ async function changePriority(task, priority) {
 
 const voiceBase = ref('')  // text already in the box when a voice session starts
 
+const mics = ref([])          // available audio input devices
+const selectedMicId = ref('') // '' = system default
+
+async function loadMics() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    // Windows exposes the same physical mic multiple times (Default,
+    // Communications, raw device). Deduplicate by groupId so each real
+    // microphone appears once.
+    const seen = new Set()
+    mics.value = devices.filter(d => {
+      if (d.kind !== 'audioinput') return false
+      const key = d.groupId || d.deviceId
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    // Keep the previous selection if it still exists, else default.
+    if (!mics.value.some(d => d.deviceId === selectedMicId.value)) {
+      selectedMicId.value = mics.value[0]?.deviceId || ''
+    }
+  } catch {
+    mics.value = []
+  }
+}
+
 const voice = useVoice({
   onInterim(text) {
     brainDump.value = voiceBase.value
@@ -213,10 +239,6 @@ const voice = useVoice({
       : text
   },
   onStop() {
-    isListening.value = false
-    voiceBase.value = ''
-  },
-  onIdleStop() {
     isListening.value = false
     voiceBase.value = ''
   },
@@ -235,7 +257,7 @@ function toggleMic() {
     voiceBase.value = ''
   } else {
     voiceBase.value = brainDump.value
-    voice.start()
+    voice.start(selectedMicId.value)
     isListening.value = true
   }
 }
@@ -250,6 +272,7 @@ function onTextareaKeydown(event) {
 onMounted(async () => {
   startWatchdog()
   await connect()
+  loadMics()
 })
 
 onUnmounted(() => {
@@ -366,6 +389,17 @@ onUnmounted(() => {
           </svg>
           {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
+        <select
+          v-if="mics.length > 1"
+          v-model="selectedMicId"
+          :disabled="isListening"
+          class="text-xs px-2 py-1.5 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600 disabled:opacity-40 max-w-[140px]"
+          title="Choose microphone"
+        >
+          <option v-for="m in mics" :key="m.deviceId" :value="m.deviceId">
+            {{ m.label || 'Microphone' }}
+          </option>
+        </select>
         <button
           @click="handleParse"
           :disabled="isParsing"
@@ -563,6 +597,17 @@ onUnmounted(() => {
           </svg>
           {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
+        <select
+          v-if="mics.length > 1"
+          v-model="selectedMicId"
+          :disabled="isListening"
+          class="text-xs px-2 py-1.5 rounded-md bg-zinc-100 text-zinc-500 border border-zinc-200 hover:border-zinc-300 disabled:opacity-40 max-w-[140px]"
+          title="Choose microphone"
+        >
+          <option v-for="m in mics" :key="m.deviceId" :value="m.deviceId">
+            {{ m.label || 'Microphone' }}
+          </option>
+        </select>
         <button
           @click="handleParse"
           :disabled="isParsing"
