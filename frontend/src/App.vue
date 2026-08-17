@@ -241,7 +241,6 @@ async function toggleToday(task) {
 // The title is edited in place (single-click on the title), so there is no
 // duplicate title inside the panel and no click/dblclick ambiguity.
 function toggleExpand(task) {
-  if (editingId.value === task.id) return // don't collapse while editing title
   if (expandedId.value === task.id) {
     expandedId.value = null
     return
