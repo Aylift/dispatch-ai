@@ -32,14 +32,14 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('can type in textarea and add task', async ({ page }) => {
-    const textarea = page.locator('textarea')
+    const textarea = page.locator('[data-testid="task-input"]')
     await textarea.fill('buy milk')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=buy milk')).toBeVisible()
   })
 
   test('task appears with checkbox', async ({ page }) => {
-    await page.locator('textarea').fill('test task')
+    await page.locator('[data-testid="task-input"]').fill('test task')
     await page.locator('text=+ Add Task').click()
     const row = page.locator('div', { hasText: 'test task' }).filter({ has: page.locator('input[type="checkbox"]') }).first()
     const checkbox = row.locator('input[type="checkbox"]')
@@ -48,7 +48,7 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('can toggle task done', async ({ page }) => {
-    await page.locator('textarea').fill('toggle me')
+    await page.locator('[data-testid="task-input"]').fill('toggle me')
     await page.locator('text=+ Add Task').click()
     const row = page.locator('div', { hasText: 'toggle me' }).filter({ has: page.locator('input[type="checkbox"]') }).first()
     const checkbox = row.locator('input[type="checkbox"]')
@@ -57,7 +57,7 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('clear done button appears and works', async ({ page }) => {
-    await page.locator('textarea').fill('done task')
+    await page.locator('[data-testid="task-input"]').fill('done task')
     await page.locator('text=+ Add Task').click()
     const row = page.locator('div', { hasText: 'done task' }).filter({ has: page.locator('input[type="checkbox"]') }).first()
     const checkbox = row.locator('input[type="checkbox"]')
@@ -90,7 +90,7 @@ test.describe('Dispatch AI - basic UI', () => {
     // Set the input priority to Critical by clicking segment 1 on the toolbar meter
     await page.locator('[data-testid="priority-meter"]').first()
       .locator('button[data-priority="1"]').click()
-    await page.locator('textarea').fill('urgent task')
+    await page.locator('[data-testid="task-input"]').fill('urgent task')
     await page.locator('text=+ Add Task').click()
     // The task row shows its meter with priority 1 -> title mentions Critical
     const taskMeter = page.locator('[data-testid="priority-meter"]').nth(1)
@@ -99,7 +99,7 @@ test.describe('Dispatch AI - basic UI', () => {
 
   test('priority meter changes and re-sorts', async ({ page }) => {
     // Create one task then change its priority via its meter
-    await page.locator('textarea').fill('my task')
+    await page.locator('[data-testid="task-input"]').fill('my task')
     await page.locator('text=+ Add Task').click()
     // Task row meter defaults to Medium (3)
     const taskMeter0 = page.locator('[data-testid="priority-meter"]').nth(1)
@@ -108,7 +108,7 @@ test.describe('Dispatch AI - basic UI', () => {
     await taskMeter0.locator('button[data-priority="1"]').click()
     await expect(taskMeter0).toHaveAttribute('title', /Critical/)
     // Create another task - it should sort below the Critical one
-    await page.locator('textarea').fill('second task')
+    await page.locator('[data-testid="task-input"]').fill('second task')
     await page.locator('text=+ Add Task').click()
     // Critical task is still first
     await expect(page.locator('[data-testid="priority-meter"]').nth(1)).toHaveAttribute('title', /Critical/)
@@ -116,7 +116,7 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('sort toggle defaults to Priority', async ({ page }) => {
-    await page.locator('textarea').fill('sortable')
+    await page.locator('[data-testid="task-input"]').fill('sortable')
     await page.locator('text=+ Add Task').click()
     // The active sort option (Priority) is highlit while Created is muted
     const created = page.locator('[data-testid="sort-created"]')
@@ -127,10 +127,10 @@ test.describe('Dispatch AI - basic UI', () => {
     // Create two tasks; newest should win in 'created' mode.
     // Wait for each task row to appear before adding the next, because the
     // async add clears the textarea when it resolves (would wipe the next input).
-    await page.locator('textarea').fill('older task')
+    await page.locator('[data-testid="task-input"]').fill('older task')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('[data-testid="task-row"]')).toHaveCount(1)
-    await page.locator('textarea').fill('newer task')
+    await page.locator('[data-testid="task-input"]').fill('newer task')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('[data-testid="task-row"]')).toHaveCount(2)
 
@@ -148,10 +148,10 @@ test.describe('Dispatch AI - basic UI', () => {
     // Create a Critical task first (older), then a Medium task (newer).
     await page.locator('[data-testid="priority-meter"]').first()
       .locator('button[data-priority="1"]').click()
-    await page.locator('textarea').fill('critical old task')
+    await page.locator('[data-testid="task-input"]').fill('critical old task')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('[data-testid="task-row"]')).toHaveCount(1)
-    await page.locator('textarea').fill('medium new task')
+    await page.locator('[data-testid="task-input"]').fill('medium new task')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('[data-testid="task-row"]')).toHaveCount(2)
 
@@ -182,7 +182,7 @@ test.describe('Dispatch AI - basic UI', () => {
       })
     })
 
-    await page.locator('textarea').fill('fix the sink, buy milk asap and maybe organize photos')
+    await page.locator('[data-testid="task-input"]').fill('fix the sink, buy milk asap and maybe organize photos')
     await page.getByRole('button', { name: 'Organize' }).click()
 
     // All three tasks appear
@@ -190,22 +190,22 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=Buy milk ASAP')).toBeVisible()
     await expect(page.locator('text=Organize photos')).toBeVisible()
     // Input is cleared after parse
-    await expect(page.locator('textarea')).toHaveValue('')
+    await expect(page.locator('[data-testid="task-input"]')).toHaveValue('')
   })
 
   test('shows task count', async ({ page }) => {
     // After cleanup, should be 0
     await expect(page.locator('footer')).toContainText('0 tasks')
-    await page.locator('textarea').fill('task one')
+    await page.locator('[data-testid="task-input"]').fill('task one')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('footer')).toContainText('1 task')
-    await page.locator('textarea').fill('task two')
+    await page.locator('[data-testid="task-input"]').fill('task two')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('footer')).toContainText('2 tasks')
   })
 
   test('double-click enters edit mode and Enter saves new title', async ({ page }) => {
-    await page.locator('textarea').fill('old title')
+    await page.locator('[data-testid="task-input"]').fill('old title')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=old title')).toBeVisible()
 
@@ -220,7 +220,7 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('Esc cancels edit without saving', async ({ page }) => {
-    await page.locator('textarea').fill('keep me')
+    await page.locator('[data-testid="task-input"]').fill('keep me')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=keep me')).toBeVisible()
 
@@ -235,7 +235,7 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('blur saves the edited title', async ({ page }) => {
-    await page.locator('textarea').fill('blur me')
+    await page.locator('[data-testid="task-input"]').fill('blur me')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=blur me')).toBeVisible()
 
@@ -250,11 +250,11 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('TODAY tab shows only tagged tasks', async ({ page }) => {
-    await page.locator('textarea').fill('normal task')
+    await page.locator('[data-testid="task-input"]').fill('normal task')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=normal task')).toBeVisible()
 
-    await page.locator('textarea').fill('today task')
+    await page.locator('[data-testid="task-input"]').fill('today task')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=today task')).toBeVisible()
 
@@ -270,7 +270,7 @@ test.describe('Dispatch AI - basic UI', () => {
   })
 
   test('untagging removes task from TODAY tab but keeps it in All', async ({ page }) => {
-    await page.locator('textarea').fill('temp today')
+    await page.locator('[data-testid="task-input"]').fill('temp today')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=temp today')).toBeVisible()
 
@@ -289,6 +289,28 @@ test.describe('Dispatch AI - basic UI', () => {
     // Still present in All
     await page.locator('[data-testid="tab-all"]').click()
     await expect(page.locator('text=temp today')).toBeVisible()
+  })
+
+  test('clicking a task expands detail panel and edits description', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('plan trip')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=plan trip')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'plan trip' })
+    await row.click()
+    const detail = page.locator('[data-testid="task-detail"]')
+    await expect(detail).toBeVisible()
+
+    const desc = detail.locator('[data-testid="task-description-input"]')
+    await desc.fill('book flights and hotel for June')
+    await desc.blur()
+
+    // Collapse and re-expand: description persists (saved to backend)
+    await row.click()
+    await expect(detail).not.toBeVisible()
+    await row.click()
+    await expect(detail).toBeVisible()
+    await expect(detail.locator('[data-testid="task-description-input"]')).toHaveValue('book flights and hotel for June')
   })
 })
 

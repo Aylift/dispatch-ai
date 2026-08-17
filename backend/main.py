@@ -108,7 +108,7 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
 
 @app.post("/tasks", response_model=TaskOut, status_code=201)
 async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
-    task = Task(text=body.text, priority=body.priority)
+    task = Task(text=body.text, description=body.description, priority=body.priority)
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -123,7 +123,11 @@ async def parse_and_create_tasks(body: TaskParseIn, db: AsyncSession = Depends(g
     parsed = parse_tasks(body.text)
     created = []
     for item in parsed:
-        task = Task(text=item["text"], priority=item["priority"])
+        task = Task(
+            text=item["text"],
+            description=item.get("description"),
+            priority=item["priority"],
+        )
         db.add(task)
         created.append(task)
     await db.commit()
@@ -140,6 +144,8 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         raise HTTPException(404, "Task not found")
     if body.text is not None:
         task.text = body.text
+    if body.description is not None:
+        task.description = body.description
     if body.done is not None:
         task.done = body.done
     if body.priority is not None:

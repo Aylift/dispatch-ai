@@ -29,6 +29,27 @@ def test_create_task_with_priority(client):
     assert res.json()["priority"] == 1
 
 
+def test_create_task_with_description(client):
+    res = client.post("/tasks", json={"text": "plan trip", "description": "book flights and hotel for June"})
+    assert res.status_code == 201
+    data = res.json()
+    assert data["description"] == "book flights and hotel for June"
+
+
+def test_create_task_description_defaults_to_null(client):
+    res = client.post("/tasks", json={"text": "no desc"})
+    assert res.status_code == 201
+    assert res.json()["description"] is None
+
+
+def test_update_description(client):
+    created = client.post("/tasks", json={"text": "desc me"}).json()
+    tid = created["id"]
+    res = client.patch(f"/tasks/{tid}", json={"description": "some long notes here"})
+    assert res.status_code == 200
+    assert res.json()["description"] == "some long notes here"
+
+
 def test_create_task_rejects_invalid_priority(client):
     res = client.post("/tasks", json={"text": "bad", "priority": 9})
     assert res.status_code == 422
@@ -64,6 +85,20 @@ def test_parse_creates_multiple_tasks(client, monkeypatch):
     assert len(data) == 3
     assert [t["text"] for t in data] == ["send email", "buy groceries", "organize desk"]
     assert [t["priority"] for t in data] == [1, 3, 5]
+
+
+def test_parse_creates_description(client, monkeypatch):
+    def fake(text):
+        return [
+            {"text": "plan trip", "priority": 2, "description": "book flights and hotel"},
+            {"text": "no detail", "priority": 3, "description": ""},
+        ]
+    monkeypatch.setattr(main_module, "parse_tasks", fake)
+    res = client.post("/tasks/parse", json={"text": "brain dump here"})
+    assert res.status_code == 201
+    data = res.json()
+    assert data[0]["description"] == "book flights and hotel"
+    assert data[1]["description"] == ""
 
 
 def test_parse_isolation(client, monkeypatch):

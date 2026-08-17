@@ -5,11 +5,13 @@ from typing import Optional
 
 class TaskCreate(BaseModel):
     text: str
+    description: Optional[str] = None
     priority: Optional[int] = Field(default=3, ge=1, le=5)
 
 
 class TaskUpdate(BaseModel):
     text: Optional[str] = None
+    description: Optional[str] = None
     done: Optional[bool] = None
     priority: Optional[int] = Field(default=None, ge=1, le=5)
     tags: Optional[list[str]] = None
@@ -22,6 +24,7 @@ class TaskParseIn(BaseModel):
 class TaskOut(BaseModel):
     id: int
     text: str
+    description: Optional[str] = None
     done: bool
     priority: int
     tags: list[str]

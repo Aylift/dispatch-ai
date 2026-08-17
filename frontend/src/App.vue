@@ -19,6 +19,9 @@ const TODAY_TAG = 'TODAY'
 const editingId = ref(null)      // task id currently in title-edit mode
 const editingText = ref('')      // draft text while editing
 let editInputEl = null
+const expandedId = ref(null)     // task id currently expanded (detail panel)
+const descDraft = ref('')        // draft description while editing
+let descInputEl = null
 
 // Backend/DB connection state: 'loading' = connecting/retrying, 'ready' = up,
 // 'error' = unreachable (backend or DB failed).
@@ -233,6 +236,34 @@ async function toggleToday(task) {
   }
 }
 
+// ---- Task detail expansion (single-click) --------------------------------
+// Clicking a task toggles an inline detail panel with the description editor.
+function toggleExpand(task) {
+  if (editingId.value === task.id) return // don't collapse while editing title
+  if (expandedId.value === task.id) {
+    expandedId.value = null
+    return
+  }
+  expandedId.value = task.id
+  descDraft.value = task.description || ''
+  requestAnimationFrame(() => {
+    if (descInputEl) descInputEl.focus()
+  })
+}
+
+async function saveDescription(task) {
+  const desc = descDraft.value.trim()
+  if (desc === (task.description || '')) return
+  try {
+    const updated = await updateTask(task.id, { description: desc || null })
+    task.description = updated.description
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
 // ---- Task title editing (double-click) -----------------------------------
 function startEdit(task) {
   editingId.value = task.id
@@ -417,6 +448,7 @@ onUnmounted(() => {
       <div class="flex items-center gap-3">
         <textarea
           v-model="brainDump"
+          data-testid="task-input"
           @keydown.ctrl.enter="handleDump"
           @keydown="onTextareaKeydown"
           placeholder="Brain dump here... (Ctrl+Enter to submit)"
@@ -508,53 +540,75 @@ onUnmounted(() => {
         >All</button>
       </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
-        <div
-          v-for="task in visibleTasks"
-          :key="task.id"
-          data-testid="task-row"
-          class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
-          :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
-        >
-          <input
-            type="checkbox"
-            :checked="task.done"
-            @change="task.done = !task.done; toggleDone(task)"
-            class="appearance-none w-4 h-4 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0 mt-0.5"
-            :class="{ 'opacity-40': task.done }"
-          />
-          <div class="flex-1 flex items-center gap-2 min-w-0">
+        <div v-for="task in visibleTasks" :key="task.id" class="rounded-md">
+          <div
+            data-testid="task-row"
+            @click="toggleExpand(task)"
+            class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
+            :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
+          >
             <input
-              v-if="editingId === task.id"
-              ref="editInputEl"
-              v-model="editingText"
-              data-testid="task-title-input"
-              @keydown.enter="saveEdit(task)"
-              @keydown.esc="cancelEdit"
-              @blur="saveEdit(task)"
-              class="flex-1 min-w-0 text-sm leading-snug bg-zinc-900 border border-sky-500/60 rounded px-1.5 py-0.5 text-zinc-100 focus:outline-none"
+              type="checkbox"
+              :checked="task.done"
+              @click.stop
+              @change="task.done = !task.done; toggleDone(task)"
+              class="appearance-none w-4 h-4 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0 mt-0.5"
+              :class="{ 'opacity-40': task.done }"
             />
-            <span
-              v-else
-              @dblclick="startEdit(task)"
-              class="text-sm leading-snug flex-1 truncate"
-              :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
-              :title="'Double-click to edit'"
-            >{{ task.text }}</span>
-            <PriorityMeter
-              :modelValue="task.priority"
-              size="xs"
-              :light="!isDark"
-              @update:modelValue="changePriority(task, $event)"
-            />
-            <button
-              data-testid="toggle-today"
-              @click="toggleToday(task)"
-              class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-              :class="hasTag(task, TODAY_TAG)
-                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
-              :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
-            >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+            <div class="flex-1 flex items-center gap-2 min-w-0">
+              <input
+                v-if="editingId === task.id"
+                ref="editInputEl"
+                v-model="editingText"
+                data-testid="task-title-input"
+                @click.stop
+                @keydown.enter="saveEdit(task)"
+                @keydown.esc="cancelEdit"
+                @blur="saveEdit(task)"
+                class="flex-1 min-w-0 text-sm leading-snug bg-zinc-900 border border-sky-500/60 rounded px-1.5 py-0.5 text-zinc-100 focus:outline-none"
+              />
+              <span
+                v-else
+                @dblclick.stop="startEdit(task)"
+                class="text-sm leading-snug flex-1 truncate"
+                :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
+                :title="'Click to expand · Double-click to edit'"
+              >{{ task.text }}</span>
+              <PriorityMeter
+                :modelValue="task.priority"
+                size="xs"
+                :light="!isDark"
+                @update:modelValue="changePriority(task, $event)"
+              />
+              <button
+                data-testid="toggle-today"
+                @click.stop="toggleToday(task)"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+                :class="hasTag(task, TODAY_TAG)
+                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                  : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
+                :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
+              >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+            </div>
+          </div>
+          <div
+            v-if="expandedId === task.id"
+            data-testid="task-detail"
+            class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-zinc-900/60 border border-zinc-700/40"
+          >
+            <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
+              <span v-for="tag in (task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag }}</span>
+              <span v-if="!(task.tags || []).length" class="italic">no tags</span>
+            </div>
+            <textarea
+              ref="descInputEl"
+              v-model="descDraft"
+              data-testid="task-description-input"
+              @blur="saveDescription(task)"
+              placeholder="Add a description..."
+              class="w-full bg-zinc-900 border border-zinc-700/60 rounded p-2 text-xs text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-sky-500/50"
+              rows="3"
+            ></textarea>
           </div>
         </div>
       </TransitionGroup>
@@ -661,6 +715,7 @@ onUnmounted(() => {
       <div class="flex items-center gap-3">
         <textarea
           v-model="brainDump"
+          data-testid="task-input"
           @keydown.ctrl.enter="handleDump"
           @keydown="onTextareaKeydown"
           placeholder="Brain dump here... (Ctrl+Enter to submit)"
@@ -752,53 +807,75 @@ onUnmounted(() => {
         >All</button>
       </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
-        <div
-          v-for="task in visibleTasks"
-          :key="task.id"
-          data-testid="task-row"
-          class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
-          :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
-        >
-          <input
-            type="checkbox"
-            :checked="task.done"
-            @change="task.done = !task.done; toggleDone(task)"
-            class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
-            :class="{ 'opacity-40': task.done }"
-          />
-          <div class="flex-1 flex items-center gap-2 min-w-0">
+        <div v-for="task in visibleTasks" :key="task.id" class="rounded-md">
+          <div
+            data-testid="task-row"
+            @click="toggleExpand(task)"
+            class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
+            :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
+          >
             <input
-              v-if="editingId === task.id"
-              ref="editInputEl"
-              v-model="editingText"
-              data-testid="task-title-input"
-              @keydown.enter="saveEdit(task)"
-              @keydown.esc="cancelEdit"
-              @blur="saveEdit(task)"
-              class="flex-1 min-w-0 text-sm leading-snug bg-white border border-sky-400/70 rounded px-1.5 py-0.5 text-zinc-800 focus:outline-none"
+              type="checkbox"
+              :checked="task.done"
+              @click.stop
+              @change="task.done = !task.done; toggleDone(task)"
+              class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
+              :class="{ 'opacity-40': task.done }"
             />
-            <span
-              v-else
-              @dblclick="startEdit(task)"
-              class="text-sm leading-snug flex-1 truncate"
-              :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
-              :title="'Double-click to edit'"
-            >{{ task.text }}</span>
-            <PriorityMeter
-              :modelValue="task.priority"
-              size="xs"
-              :light="!isDark"
-              @update:modelValue="changePriority(task, $event)"
-            />
-            <button
-              data-testid="toggle-today"
-              @click="toggleToday(task)"
-              class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-              :class="hasTag(task, TODAY_TAG)
-                ? 'bg-sky-500/15 text-sky-600 border-sky-500/40'
-                : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
-              :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
-            >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+            <div class="flex-1 flex items-center gap-2 min-w-0">
+              <input
+                v-if="editingId === task.id"
+                ref="editInputEl"
+                v-model="editingText"
+                data-testid="task-title-input"
+                @click.stop
+                @keydown.enter="saveEdit(task)"
+                @keydown.esc="cancelEdit"
+                @blur="saveEdit(task)"
+                class="flex-1 min-w-0 text-sm leading-snug bg-white border border-sky-400/70 rounded px-1.5 py-0.5 text-zinc-800 focus:outline-none"
+              />
+              <span
+                v-else
+                @dblclick.stop="startEdit(task)"
+                class="text-sm leading-snug flex-1 truncate"
+                :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
+                :title="'Click to expand · Double-click to edit'"
+              >{{ task.text }}</span>
+              <PriorityMeter
+                :modelValue="task.priority"
+                size="xs"
+                :light="!isDark"
+                @update:modelValue="changePriority(task, $event)"
+              />
+              <button
+                data-testid="toggle-today"
+                @click.stop="toggleToday(task)"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+                :class="hasTag(task, TODAY_TAG)
+                  ? 'bg-sky-500/15 text-sky-600 border-sky-500/40'
+                  : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
+                :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
+              >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+            </div>
+          </div>
+          <div
+            v-if="expandedId === task.id"
+            data-testid="task-detail"
+            class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-white border border-zinc-200"
+          >
+            <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
+              <span v-for="tag in (task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag }}</span>
+              <span v-if="!(task.tags || []).length" class="italic">no tags</span>
+            </div>
+            <textarea
+              ref="descInputEl"
+              v-model="descDraft"
+              data-testid="task-description-input"
+              @blur="saveDescription(task)"
+              placeholder="Add a description..."
+              class="w-full bg-zinc-50 border border-zinc-200 rounded p-2 text-xs text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400/60"
+              rows="3"
+            ></textarea>
           </div>
         </div>
       </TransitionGroup>
