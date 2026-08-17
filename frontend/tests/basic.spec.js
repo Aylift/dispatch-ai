@@ -204,12 +204,12 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('footer')).toContainText('2 tasks')
   })
 
-  test('double-click enters edit mode and Enter saves new title', async ({ page }) => {
+  test('clicking the title edits it in place and Enter saves', async ({ page }) => {
     await page.locator('[data-testid="task-input"]').fill('old title')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=old title')).toBeVisible()
 
-    await page.locator('text=old title').dblclick()
+    await page.locator('text=old title').click()
     const input = page.locator('[data-testid="task-title-input"]')
     await expect(input).toBeVisible()
     await input.fill('new title')
@@ -219,27 +219,12 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=old title')).not.toBeVisible()
   })
 
-  test('Esc cancels edit without saving', async ({ page }) => {
-    await page.locator('[data-testid="task-input"]').fill('keep me')
-    await page.locator('text=+ Add Task').click()
-    await expect(page.locator('text=keep me')).toBeVisible()
-
-    await page.locator('text=keep me').dblclick()
-    const input = page.locator('[data-testid="task-title-input"]')
-    await expect(input).toBeVisible()
-    await input.fill('should not save')
-    await input.press('Escape')
-
-    await expect(page.locator('text=keep me')).toBeVisible()
-    await expect(page.locator('text=should not save')).not.toBeVisible()
-  })
-
   test('blur saves the edited title', async ({ page }) => {
     await page.locator('[data-testid="task-input"]').fill('blur me')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=blur me')).toBeVisible()
 
-    await page.locator('text=blur me').dblclick()
+    await page.locator('text=blur me').click()
     const input = page.locator('[data-testid="task-title-input"]')
     await expect(input).toBeVisible()
     await input.fill('blur saved')
@@ -291,13 +276,14 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=temp today')).toBeVisible()
   })
 
-  test('clicking a task expands detail panel and edits description', async ({ page }) => {
+  test('expanding a task edits its description', async ({ page }) => {
     await page.locator('[data-testid="task-input"]').fill('plan trip')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=plan trip')).toBeVisible()
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'plan trip' })
-    await row.click()
+    const expand = row.locator('[data-testid="task-expand"]')
+    await expand.click()
     const detail = page.locator('[data-testid="task-detail"]')
     await expect(detail).toBeVisible()
 
@@ -306,9 +292,9 @@ test.describe('Dispatch AI - basic UI', () => {
     await desc.blur()
 
     // Collapse and re-expand: description persists (saved to backend)
-    await row.click()
+    await expand.click()
     await expect(detail).not.toBeVisible()
-    await row.click()
+    await expand.click()
     await expect(detail).toBeVisible()
     await expect(detail.locator('[data-testid="task-description-input"]')).toHaveValue('book flights and hotel for June')
   })

@@ -16,12 +16,12 @@ const selectedPriority = ref(3)
 const sortMode = ref('priority') // 'priority' | 'created'
 const view = ref('today')        // 'all' | 'today' — which tab is shown (TODAY is default)
 const TODAY_TAG = 'TODAY'
-const editingId = ref(null)      // task id currently in title-edit mode
-const editingText = ref('')      // draft text while editing
-let editInputEl = null
 const expandedId = ref(null)     // task id currently expanded (detail panel)
 const descDraft = ref('')        // draft description while editing
+const editingId = ref(null)      // task id currently in title-edit mode
+const editingText = ref('')      // draft text while editing
 let descInputEl = null
+let editInputEl = null
 
 // Backend/DB connection state: 'loading' = connecting/retrying, 'ready' = up,
 // 'error' = unreachable (backend or DB failed).
@@ -236,8 +236,10 @@ async function toggleToday(task) {
   }
 }
 
-// ---- Task detail expansion (single-click) --------------------------------
+// ---- Task detail expansion (single-click on the row) ---------------------
 // Clicking a task toggles an inline detail panel with the description editor.
+// The title is edited in place (single-click on the title), so there is no
+// duplicate title inside the panel and no click/dblclick ambiguity.
 function toggleExpand(task) {
   if (editingId.value === task.id) return // don't collapse while editing title
   if (expandedId.value === task.id) {
@@ -264,7 +266,7 @@ async function saveDescription(task) {
   }
 }
 
-// ---- Task title editing (double-click) -----------------------------------
+// ---- Task title editing (single-click, in place) ------------------------
 function startEdit(task) {
   editingId.value = task.id
   editingText.value = task.text
@@ -543,8 +545,7 @@ onUnmounted(() => {
         <div v-for="task in visibleTasks" :key="task.id" class="rounded-md">
           <div
             data-testid="task-row"
-            @click="toggleExpand(task)"
-            class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
+            class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
             :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
           >
             <input
@@ -569,15 +570,16 @@ onUnmounted(() => {
               />
               <span
                 v-else
-                @dblclick.stop="startEdit(task)"
-                class="text-sm leading-snug flex-1 truncate"
+                @click.stop="startEdit(task)"
+                class="text-sm leading-snug flex-1 truncate cursor-text"
                 :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
-                :title="'Click to expand · Double-click to edit'"
+                :title="'Click to edit title'"
               >{{ task.text }}</span>
               <PriorityMeter
                 :modelValue="task.priority"
                 size="xs"
                 :light="!isDark"
+                @click.stop
                 @update:modelValue="changePriority(task, $event)"
               />
               <button
@@ -589,6 +591,12 @@ onUnmounted(() => {
                   : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
                 :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
               >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+              <button
+                data-testid="task-expand"
+                @click.stop="toggleExpand(task)"
+                class="text-zinc-500 hover:text-sky-300 transition-colors shrink-0 cursor-pointer px-0.5"
+                :title="expandedId === task.id ? 'Collapse' : 'Expand'"
+              >{{ expandedId === task.id ? '▾' : '▸' }}</button>
             </div>
           </div>
           <div
@@ -810,8 +818,7 @@ onUnmounted(() => {
         <div v-for="task in visibleTasks" :key="task.id" class="rounded-md">
           <div
             data-testid="task-row"
-            @click="toggleExpand(task)"
-            class="flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer"
+            class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
             :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
           >
             <input
@@ -836,15 +843,16 @@ onUnmounted(() => {
               />
               <span
                 v-else
-                @dblclick.stop="startEdit(task)"
-                class="text-sm leading-snug flex-1 truncate"
+                @click.stop="startEdit(task)"
+                class="text-sm leading-snug flex-1 truncate cursor-text"
                 :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
-                :title="'Click to expand · Double-click to edit'"
+                :title="'Click to edit title'"
               >{{ task.text }}</span>
               <PriorityMeter
                 :modelValue="task.priority"
                 size="xs"
                 :light="!isDark"
+                @click.stop
                 @update:modelValue="changePriority(task, $event)"
               />
               <button
@@ -856,6 +864,12 @@ onUnmounted(() => {
                   : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
                 :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
               >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+              <button
+                data-testid="task-expand"
+                @click.stop="toggleExpand(task)"
+                class="text-zinc-400 hover:text-sky-600 transition-colors shrink-0 cursor-pointer px-0.5"
+                :title="expandedId === task.id ? 'Collapse' : 'Expand'"
+              >{{ expandedId === task.id ? '▾' : '▸' }}</button>
             </div>
           </div>
           <div
