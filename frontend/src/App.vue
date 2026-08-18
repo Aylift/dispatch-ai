@@ -24,6 +24,42 @@ const editingText = ref('')      // draft text while editing
 let descInputEl = null
 let editInputEl = null
 
+// Transient undo state for the Today / Recur toggles. When one is clicked the
+// change applies optimistically and the button turns into a countdown with a
+// reverse arrow; if the user doesn't cancel within the window it commits to the
+// backend. This stops a mis-click from yanking a task out of the current tab.
+const undo = ref(null) // { taskId, action, remaining, timer, revert, commit }
+
+function cancelUndo() {
+  if (undo.value) {
+    clearInterval(undo.value.timer)
+    undo.value = null
+  }
+}
+
+function startUndo(taskId, action, revert, commit, seconds = 3) {
+  cancelUndo()
+  const timer = setInterval(() => {
+    const u = undo.value
+    if (!u) return
+    u.remaining -= 1
+    if (u.remaining <= 0) {
+      clearInterval(u.timer)
+      undo.value = null
+      u.commit()
+    }
+  }, 1000)
+  undo.value = { taskId, action, remaining: seconds, timer, revert, commit }
+}
+
+function undoNow() {
+  if (undo.value) {
+    clearInterval(undo.value.timer)
+    undo.value.revert()
+    undo.value = null
+  }
+}
+
 // Backend/DB connection state: 'loading' = connecting/retrying, 'ready' = up,
 // 'error' = unreachable (backend or DB failed).
 const appStatus = ref(isTauri ? 'loading' : 'ready')
@@ -44,9 +80,15 @@ const isDark = computed(() => theme.value === 'dark')
 // 'priority': 1=highest first, then newest. 'created': newest first.
 const hasTag = (task, tag) => Array.isArray(task.tags) && task.tags.includes(tag)
 
-// Tasks shown in the active tab. 'today' filters to tasks tagged TODAY.
+// A task with a pending undo stays in the TODAY tab even if it just lost its
+// TODAY tag, so the reverse-arrow button remains clickable instead of the row
+// vanishing to the All list mid-countdown.
+const hasPendingUndo = (taskId) => undo.value && undo.value.taskId === taskId
+
+// Tasks shown in the active tab. 'today' filters to tasks tagged TODAY, plus
+// any task still inside its undo window so the revert button stays visible.
 const visibleTasks = computed(() => {
-  if (view.value === 'today') return sortedTasks.value.filter(t => hasTag(t, TODAY_TAG))
+  if (view.value === 'today') return sortedTasks.value.filter(t => hasTag(t, TODAY_TAG) || hasPendingUndo(t.id))
   return sortedTasks.value
 })
 
@@ -245,37 +287,58 @@ async function changePriority(task, priority) {
 }
 
 // Toggle the TODAY tag on a task. It stays in the main list but also appears
-// in the TODAY tab.
-async function toggleToday(task) {
-  const tags = hasTag(task, TODAY_TAG)
-    ? task.tags.filter(t => t !== TODAY_TAG)
-    : [...(task.tags || []), TODAY_TAG]
-  try {
-    const updated = await updateTask(task.id, { tags })
-    task.tags = updated.tags
-  } catch (err) {
-    console.error(err)
-    connectionError.value = 'Could not update task — backend unreachable.'
-    appStatus.value = 'error'
-  }
+// in the TODAY tab. Applies optimistically and offers a 3s undo window so a
+// mis-click doesn't yank the task out of the current tab.
+function toggleToday(task) {
+  const prevTags = task.tags || []
+  const had = hasTag(task, TODAY_TAG)
+  const newTags = had
+    ? prevTags.filter(t => t !== TODAY_TAG)
+    : [...prevTags, TODAY_TAG]
+  task.tags = newTags
+  startUndo(
+    task.id, 'today',
+    () => { task.tags = prevTags },
+    async () => {
+      try {
+        const updated = await updateTask(task.id, { tags: newTags })
+        task.tags = updated.tags
+      } catch (err) {
+        console.error(err)
+        task.tags = prevTags
+      }
+    },
+    3
+  )
 }
 
 // Toggle the recurring flag. Recurring tasks always carry the TODAY tag so they
-// show up in the TODAY tab and reset daily on the backend.
-async function toggleRecurring(task) {
-  const recurring = !task.recurring
-  let tags = task.tags || []
-  if (recurring && !hasTag(task, TODAY_TAG)) tags = [...tags, TODAY_TAG]
-  if (!recurring) tags = tags.filter(t => t !== RECURRING_TAG)
-  try {
-    const updated = await updateTask(task.id, { recurring, tags })
-    task.recurring = updated.recurring
-    task.tags = updated.tags
-  } catch (err) {
-    console.error(err)
-    connectionError.value = 'Could not update task — backend unreachable.'
-    appStatus.value = 'error'
-  }
+// show up in the TODAY tab and reset daily on the backend. Same 3s undo window.
+function toggleRecurring(task) {
+  const prevRecurring = task.recurring
+  const prevTags = task.tags || []
+  const recurring = !prevRecurring
+  let newTags = prevTags
+  if (recurring && !hasTag(task, TODAY_TAG)) newTags = [...newTags, TODAY_TAG]
+  if (!recurring) newTags = newTags.filter(t => t !== RECURRING_TAG)
+  task.recurring = recurring
+  task.tags = newTags
+  startUndo(
+    task.id, 'recurring',
+    () => { task.recurring = prevRecurring; task.tags = prevTags },
+    async () => {
+      try {
+        const updated = await updateTask(task.id, { recurring, tags: newTags })
+        task.recurring = updated.recurring
+        task.tags = updated.tags
+      } catch (err) {
+        console.error(err)
+        task.recurring = prevRecurring
+        task.tags = prevTags
+      }
+    },
+    3
+  )
 }
 
 // ---- Task detail expansion (single-click on the row) ---------------------
@@ -632,6 +695,14 @@ onUnmounted(() => {
                 @update:modelValue="changePriority(item.task, $event)"
               />
               <button
+                v-if="undo && undo.taskId === item.task.id && undo.action === 'today'"
+                data-testid="undo-today"
+                @click.stop="undoNow()"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
+                title="Undo — click to cancel"
+              >↩ {{ undo.remaining }}s</button>
+              <button
+                v-else
                 data-testid="toggle-today"
                 @click.stop="toggleToday(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -639,8 +710,16 @@ onUnmounted(() => {
                   ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                   : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
                 :title="hasTag(item.task, TODAY_TAG) ? 'Remove from today' : 'Add to today'"
-              >today</button>
+              >Today</button>
               <button
+                v-if="undo && undo.taskId === item.task.id && undo.action === 'recurring'"
+                data-testid="undo-recurring"
+                @click.stop="undoNow()"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
+                title="Undo — click to cancel"
+              >↩ {{ undo.remaining }}s</button>
+              <button
+                v-else
                 data-testid="toggle-recurring"
                 @click.stop="toggleRecurring(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -663,7 +742,7 @@ onUnmounted(() => {
             class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-zinc-900/60 border border-zinc-700/40"
           >
             <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
-              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag === TODAY_TAG ? 'today' : tag }}</span>
+              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
               <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
             </div>
             <textarea
@@ -923,6 +1002,14 @@ onUnmounted(() => {
                 @update:modelValue="changePriority(item.task, $event)"
               />
               <button
+                v-if="undo && undo.taskId === item.task.id && undo.action === 'today'"
+                data-testid="undo-today"
+                @click.stop="undoNow()"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
+                title="Undo — click to cancel"
+              >↩ {{ undo.remaining }}s</button>
+              <button
+                v-else
                 data-testid="toggle-today"
                 @click.stop="toggleToday(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -930,8 +1017,16 @@ onUnmounted(() => {
                   ? 'bg-sky-500/15 text-sky-600 border-sky-500/40'
                   : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
                 :title="hasTag(item.task, TODAY_TAG) ? 'Remove from today' : 'Add to today'"
-              >today</button>
+              >Today</button>
               <button
+                v-if="undo && undo.taskId === item.task.id && undo.action === 'recurring'"
+                data-testid="undo-recurring"
+                @click.stop="undoNow()"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
+                title="Undo — click to cancel"
+              >↩ {{ undo.remaining }}s</button>
+              <button
+                v-else
                 data-testid="toggle-recurring"
                 @click.stop="toggleRecurring(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -954,7 +1049,7 @@ onUnmounted(() => {
             class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-white border border-zinc-200"
           >
             <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
-              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag === TODAY_TAG ? 'today' : tag }}</span>
+              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
               <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
             </div>
             <textarea

@@ -243,10 +243,12 @@ test.describe('Dispatch AI - basic UI', () => {
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=today task')).toBeVisible()
 
-    // Tag "today task" via its toggle button
+    // Tag "today task" via its toggle button. The button turns into a 3s undo
+    // countdown; wait for it to expire so the change commits and the toggle
+    // button reappears.
     const todayTaskRow = page.locator('[data-testid="task-row"]', { hasText: 'today task' })
     await todayTaskRow.locator('[data-testid="toggle-today"]').click()
-    await expect(todayTaskRow.locator('[data-testid="toggle-today"]')).toContainText('today')
+    await expect(todayTaskRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
     // Switch to TODAY tab: only the tagged task shows
     await page.locator('[data-testid="tab-today"]').click()
@@ -261,11 +263,11 @@ test.describe('Dispatch AI - basic UI', () => {
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'temp today' })
     await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('today')
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
-    // Untag it
+    // Untag it (wait for the previous undo window to expire first)
     await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('today')
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
     // TODAY tab is now empty
     await page.locator('[data-testid="tab-today"]').click()
@@ -306,7 +308,7 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=normal today')).toBeVisible()
     const normalRow = page.locator('[data-testid="task-row"]', { hasText: 'normal today' })
     await normalRow.locator('[data-testid="toggle-today"]').click()
-    await expect(normalRow.locator('[data-testid="toggle-today"]')).toContainText('today')
+    await expect(normalRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
     // A recurring task
     await page.locator('[data-testid="task-input"]').fill('daily habit')
@@ -314,9 +316,9 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=daily habit')).toBeVisible()
     const recRow = page.locator('[data-testid="task-row"]', { hasText: 'daily habit' })
     await recRow.locator('[data-testid="toggle-recurring"]').click()
-    await expect(recRow.locator('[data-testid="toggle-recurring"]')).toContainText('⟳')
+    await expect(recRow.locator('[data-testid="toggle-recurring"]')).toContainText('⟳', { timeout: 5000 })
     // Recurring auto-adds the TODAY tag
-    await expect(recRow.locator('[data-testid="toggle-today"]')).toContainText('today')
+    await expect(recRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
     // TODAY tab: recurring on top, divider present, normal below
     await page.locator('[data-testid="tab-today"]').click()
@@ -328,6 +330,73 @@ test.describe('Dispatch AI - basic UI', () => {
     const recPos = await page.locator('[data-testid="task-row"]', { hasText: 'daily habit' }).evaluate(el => el.getBoundingClientRect().top)
     const normalPos = await page.locator('[data-testid="task-row"]', { hasText: 'normal today' }).evaluate(el => el.getBoundingClientRect().top)
     expect(recPos).toBeLessThan(normalPos)
+  })
+
+  test('undo arrow cancels the Today toggle before it commits', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('undo me')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=undo me')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'undo me' })
+
+    // Click Today: the button becomes a 3s undo countdown with a reverse arrow
+    await row.locator('[data-testid="toggle-today"]').click()
+    await expect(row.locator('[data-testid="undo-today"]')).toBeVisible()
+    await expect(row.locator('[data-testid="undo-today"]')).toContainText('↩')
+
+    // Cancel within the window: the toggle reverts, no commit happens
+    await row.locator('[data-testid="undo-today"]').click()
+    await expect(row.locator('[data-testid="toggle-today"]')).toBeVisible()
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today')
+
+    // The task was NOT tagged TODAY, so it must not appear in the TODAY tab
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=undo me')).not.toBeVisible()
+  })
+
+  test('undo arrow cancels the Recur toggle before it commits', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('undo recur')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=undo recur')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'undo recur' })
+
+    await row.locator('[data-testid="toggle-recurring"]').click()
+    await expect(row.locator('[data-testid="undo-recurring"]')).toBeVisible()
+    await expect(row.locator('[data-testid="undo-recurring"]')).toContainText('↩')
+
+    await row.locator('[data-testid="undo-recurring"]').click()
+    await expect(row.locator('[data-testid="toggle-recurring"]')).toBeVisible()
+
+    // Recurring was cancelled, so the task must not be tagged TODAY
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=undo recur')).not.toBeVisible()
+  })
+
+  test('untagging in TODAY tab keeps the row visible with undo until it commits', async ({ page }) => {
+    // Add a task and tag it TODAY (wait for the undo window to expire + commit)
+    await page.locator('[data-testid="task-input"]').fill('stay in today')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=stay in today')).toBeVisible()
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'stay in today' })
+    await row.locator('[data-testid="toggle-today"]').click()
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+
+    // Go to TODAY tab: the task is there
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=stay in today')).toBeVisible()
+
+    // Untag it: the row must STAY visible (with the undo button) during the
+    // countdown instead of vanishing to the All list.
+    const todayRow = page.locator('[data-testid="task-row"]', { hasText: 'stay in today' })
+    await todayRow.locator('[data-testid="toggle-today"]').click()
+    await expect(todayRow.locator('[data-testid="undo-today"]')).toBeVisible()
+    await expect(page.locator('text=stay in today')).toBeVisible()
+
+    // Click revert: the task keeps its TODAY tag and stays in the TODAY tab
+    await todayRow.locator('[data-testid="undo-today"]').click()
+    await expect(todayRow.locator('[data-testid="toggle-today"]')).toBeVisible()
+    await expect(page.locator('text=stay in today')).toBeVisible()
   })
 })
 
