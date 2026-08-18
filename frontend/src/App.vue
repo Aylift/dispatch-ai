@@ -16,6 +16,7 @@ const selectedPriority = ref(3)
 const sortMode = ref('priority') // 'priority' | 'created'
 const view = ref('today')        // 'all' | 'today' — which tab is shown (TODAY is default)
 const TODAY_TAG = 'TODAY'
+const RECURRING_TAG = 'RECURRING'
 const expandedId = ref(null)     // task id currently expanded (detail panel)
 const descDraft = ref('')        // draft description while editing
 const editingId = ref(null)      // task id currently in title-edit mode
@@ -48,6 +49,29 @@ const visibleTasks = computed(() => {
   if (view.value === 'today') return sortedTasks.value.filter(t => hasTag(t, TODAY_TAG))
   return sortedTasks.value
 })
+
+// In the TODAY tab, recurring tasks float to the top, separated from the
+// normal today tasks by a divider.
+const todayRecurring = computed(() =>
+  visibleTasks.value.filter(t => t.recurring)
+)
+const todayNormal = computed(() =>
+  visibleTasks.value.filter(t => !t.recurring)
+)
+
+// Flat list for the TODAY tab: recurring tasks, then a divider, then normal.
+const todayList = computed(() => {
+  const items = []
+  for (const t of todayRecurring.value) items.push({ type: 'task', task: t })
+  if (todayRecurring.value.length && todayNormal.value.length) items.push({ type: 'divider' })
+  for (const t of todayNormal.value) items.push({ type: 'task', task: t })
+  return items
+})
+
+// List actually rendered: TODAY tab uses the grouped list, All uses everything.
+const renderList = computed(() =>
+  view.value === 'today' ? todayList.value : visibleTasks.value.map(t => ({ type: 'task', task: t }))
+)
 
 const sortedTasks = computed(() => {
   if (sortMode.value === 'created') {
@@ -228,6 +252,24 @@ async function toggleToday(task) {
     : [...(task.tags || []), TODAY_TAG]
   try {
     const updated = await updateTask(task.id, { tags })
+    task.tags = updated.tags
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+// Toggle the recurring flag. Recurring tasks always carry the TODAY tag so they
+// show up in the TODAY tab and reset daily on the backend.
+async function toggleRecurring(task) {
+  const recurring = !task.recurring
+  let tags = task.tags || []
+  if (recurring && !hasTag(task, TODAY_TAG)) tags = [...tags, TODAY_TAG]
+  if (!recurring) tags = tags.filter(t => t !== RECURRING_TAG)
+  try {
+    const updated = await updateTask(task.id, { recurring, tags })
+    task.recurring = updated.recurring
     task.tags = updated.tags
   } catch (err) {
     console.error(err)
@@ -541,83 +583,101 @@ onUnmounted(() => {
         >All</button>
       </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
-        <div v-for="task in visibleTasks" :key="task.id" class="rounded-md">
+        <template v-for="item in renderList" :key="item.type === 'divider' ? 'recurring-divider' : item.task.id">
+          <div
+            v-if="item.type === 'divider'"
+            class="flex items-center gap-2 my-1.5 px-1"
+          >
+            <span class="text-[9px] uppercase tracking-widest text-violet-400/80 shrink-0">Recurring</span>
+            <span class="flex-1 h-px bg-gradient-to-r from-violet-500/50 via-violet-500/20 to-transparent"></span>
+          </div>
+          <div v-else class="rounded-md">
           <div
             data-testid="task-row"
             class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
-            :class="task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
+            :class="item.task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
           >
             <input
               type="checkbox"
-              :checked="task.done"
+              :checked="item.task.done"
               @click.stop
-              @change="task.done = !task.done; toggleDone(task)"
+              @change="item.task.done = !item.task.done; toggleDone(item.task)"
               class="appearance-none w-4 h-4 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0 mt-0.5"
-              :class="{ 'opacity-40': task.done }"
+              :class="{ 'opacity-40': item.task.done }"
             />
             <div class="flex-1 flex items-center gap-2 min-w-0">
               <input
-                v-if="editingId === task.id"
+                v-if="editingId === item.task.id"
                 ref="editInputEl"
                 v-model="editingText"
                 data-testid="task-title-input"
                 @click.stop
-                @keydown.enter="saveEdit(task)"
+                @keydown.enter="saveEdit(item.task)"
                 @keydown.esc="cancelEdit"
-                @blur="saveEdit(task)"
+                @blur="saveEdit(item.task)"
                 class="flex-1 min-w-0 text-sm leading-snug bg-zinc-900 border border-sky-500/60 rounded px-1.5 py-0.5 text-zinc-100 focus:outline-none"
               />
               <span
                 v-else
-                @click.stop="startEdit(task)"
+                @click.stop="startEdit(item.task)"
                 class="text-sm leading-snug flex-1 truncate cursor-text"
-                :class="task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
+                :class="item.task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
                 :title="'Click to edit title'"
-              >{{ task.text }}</span>
+              >{{ item.task.text }}</span>
               <PriorityMeter
-                :modelValue="task.priority"
+                :modelValue="item.task.priority"
                 size="xs"
                 :light="!isDark"
                 @click.stop
-                @update:modelValue="changePriority(task, $event)"
+                @update:modelValue="changePriority(item.task, $event)"
               />
               <button
                 data-testid="toggle-today"
-                @click.stop="toggleToday(task)"
+                @click.stop="toggleToday(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-                :class="hasTag(task, TODAY_TAG)
+                :class="hasTag(item.task, TODAY_TAG)
                   ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                   : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
-                :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
-              >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+                :title="hasTag(item.task, TODAY_TAG) ? 'Remove from today' : 'Add to today'"
+              >today</button>
+              <button
+                data-testid="toggle-recurring"
+                @click.stop="toggleRecurring(item.task)"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+                :class="item.task.recurring
+                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
+                  : 'text-zinc-500 border-zinc-700/50 hover:text-violet-300 hover:border-violet-500/40'"
+                :title="item.task.recurring ? 'Remove recurring' : 'Make recurring (resets daily)'"
+              >{{ item.task.recurring ? '⟳' : 'Recur' }}</button>
               <button
                 data-testid="task-expand"
-                @click.stop="toggleExpand(task)"
+                @click.stop="toggleExpand(item.task)"
                 class="text-zinc-500 hover:text-sky-300 transition-colors shrink-0 cursor-pointer px-0.5"
-                :title="expandedId === task.id ? 'Collapse' : 'Expand'"
-              >{{ expandedId === task.id ? '▾' : '▸' }}</button>
+                :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
+              >{{ expandedId === item.task.id ? '▾' : '▸' }}</button>
             </div>
           </div>
           <div
-            v-if="expandedId === task.id"
+            v-if="expandedId === item.task.id"
             data-testid="task-detail"
             class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-zinc-900/60 border border-zinc-700/40"
           >
             <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
-              <span v-for="tag in (task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag }}</span>
-              <span v-if="!(task.tags || []).length" class="italic">no tags</span>
+              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag === TODAY_TAG ? 'today' : tag }}</span>
+              <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
             </div>
             <textarea
               ref="descInputEl"
               v-model="descDraft"
               data-testid="task-description-input"
-              @blur="saveDescription(task)"
+              @blur="saveDescription(item.task)"
               placeholder="Add a description..."
               class="w-full bg-zinc-900 border border-zinc-700/60 rounded p-2 text-xs text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-sky-500/50"
               rows="3"
             ></textarea>
           </div>
-        </div>
+          </div>
+          </template>
       </TransitionGroup>
       <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-600">
         <span class="text-2xl mb-2 opacity-30">&#9670;</span>
@@ -814,83 +874,101 @@ onUnmounted(() => {
         >All</button>
       </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
-        <div v-for="task in visibleTasks" :key="task.id" class="rounded-md">
+        <template v-for="item in renderList" :key="item.type === 'divider' ? 'recurring-divider' : item.task.id">
+          <div
+            v-if="item.type === 'divider'"
+            class="flex items-center gap-2 my-1.5 px-1"
+          >
+            <span class="text-[9px] uppercase tracking-widest text-violet-500/80 shrink-0">Recurring</span>
+            <span class="flex-1 h-px bg-gradient-to-r from-violet-500/50 via-violet-500/20 to-transparent"></span>
+          </div>
+          <div v-else class="rounded-md">
           <div
             data-testid="task-row"
             class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
-            :class="task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
+            :class="item.task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
           >
             <input
               type="checkbox"
-              :checked="task.done"
+              :checked="item.task.done"
               @click.stop
-              @change="task.done = !task.done; toggleDone(task)"
+              @change="item.task.done = !item.task.done; toggleDone(item.task)"
               class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
-              :class="{ 'opacity-40': task.done }"
+              :class="{ 'opacity-40': item.task.done }"
             />
             <div class="flex-1 flex items-center gap-2 min-w-0">
               <input
-                v-if="editingId === task.id"
+                v-if="editingId === item.task.id"
                 ref="editInputEl"
                 v-model="editingText"
                 data-testid="task-title-input"
                 @click.stop
-                @keydown.enter="saveEdit(task)"
+                @keydown.enter="saveEdit(item.task)"
                 @keydown.esc="cancelEdit"
-                @blur="saveEdit(task)"
+                @blur="saveEdit(item.task)"
                 class="flex-1 min-w-0 text-sm leading-snug bg-white border border-sky-400/70 rounded px-1.5 py-0.5 text-zinc-800 focus:outline-none"
               />
               <span
                 v-else
-                @click.stop="startEdit(task)"
+                @click.stop="startEdit(item.task)"
                 class="text-sm leading-snug flex-1 truncate cursor-text"
-                :class="task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
+                :class="item.task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
                 :title="'Click to edit title'"
-              >{{ task.text }}</span>
+              >{{ item.task.text }}</span>
               <PriorityMeter
-                :modelValue="task.priority"
+                :modelValue="item.task.priority"
                 size="xs"
                 :light="!isDark"
                 @click.stop
-                @update:modelValue="changePriority(task, $event)"
+                @update:modelValue="changePriority(item.task, $event)"
               />
               <button
                 data-testid="toggle-today"
-                @click.stop="toggleToday(task)"
+                @click.stop="toggleToday(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-                :class="hasTag(task, TODAY_TAG)
+                :class="hasTag(item.task, TODAY_TAG)
                   ? 'bg-sky-500/15 text-sky-600 border-sky-500/40'
                   : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
-                :title="hasTag(task, TODAY_TAG) ? 'Remove from TODAY' : 'Add to TODAY'"
-              >{{ hasTag(task, TODAY_TAG) ? 'TODAY' : 'Today' }}</button>
+                :title="hasTag(item.task, TODAY_TAG) ? 'Remove from today' : 'Add to today'"
+              >today</button>
+              <button
+                data-testid="toggle-recurring"
+                @click.stop="toggleRecurring(item.task)"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+                :class="item.task.recurring
+                  ? 'bg-violet-500/15 text-violet-600 border-violet-500/40'
+                  : 'text-zinc-400 border-zinc-200 hover:text-violet-600 hover:border-violet-400/50'"
+                :title="item.task.recurring ? 'Remove recurring' : 'Make recurring (resets daily)'"
+              >{{ item.task.recurring ? '⟳' : 'Recur' }}</button>
               <button
                 data-testid="task-expand"
-                @click.stop="toggleExpand(task)"
+                @click.stop="toggleExpand(item.task)"
                 class="text-zinc-400 hover:text-sky-600 transition-colors shrink-0 cursor-pointer px-0.5"
-                :title="expandedId === task.id ? 'Collapse' : 'Expand'"
-              >{{ expandedId === task.id ? '▾' : '▸' }}</button>
+                :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
+              >{{ expandedId === item.task.id ? '▾' : '▸' }}</button>
             </div>
           </div>
           <div
-            v-if="expandedId === task.id"
+            v-if="expandedId === item.task.id"
             data-testid="task-detail"
             class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-white border border-zinc-200"
           >
             <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
-              <span v-for="tag in (task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag }}</span>
-              <span v-if="!(task.tags || []).length" class="italic">no tags</span>
+              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag === TODAY_TAG ? 'today' : tag }}</span>
+              <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
             </div>
             <textarea
               ref="descInputEl"
               v-model="descDraft"
               data-testid="task-description-input"
-              @blur="saveDescription(task)"
+              @blur="saveDescription(item.task)"
               placeholder="Add a description..."
               class="w-full bg-zinc-50 border border-zinc-200 rounded p-2 text-xs text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400/60"
               rows="3"
             ></textarea>
           </div>
-        </div>
+          </div>
+          </template>
       </TransitionGroup>
       <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-300">
         <span class="text-2xl mb-2 opacity-40">&#9670;</span>

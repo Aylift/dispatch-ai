@@ -1,7 +1,6 @@
 Features:
 - Redis i/lub celery w tło wrzucić przetwarzanie audio z Deepgram
 - dates for task, calendar widget or smth
-- descriptions of tasks
 - separate tab for planning stuff in tasks
 - subtasks, complete parent when done
 - recurring tasks

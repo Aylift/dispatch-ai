@@ -196,3 +196,63 @@ def test_delete_nonexistent_task(client):
     assert res.status_code == 404
 
 
+def test_create_recurring_task(client):
+    res = client.post("/tasks", json={"text": "daily standup", "recurring": True})
+    assert res.status_code == 201
+    data = res.json()
+    assert data["recurring"] is True
+
+
+def test_create_task_recurring_defaults_to_false(client):
+    res = client.post("/tasks", json={"text": "normal task"})
+    assert res.status_code == 201
+    assert res.json()["recurring"] is False
+
+
+def test_update_recurring_flag(client):
+    created = client.post("/tasks", json={"text": "flip me"}).json()
+    tid = created["id"]
+    res = client.patch(f"/tasks/{tid}", json={"recurring": True})
+    assert res.status_code == 200
+    assert res.json()["recurring"] is True
+    res2 = client.patch(f"/tasks/{tid}", json={"recurring": False})
+    assert res2.json()["recurring"] is False
+
+
+def test_recurring_task_completed_today_stays_done(client):
+    """A recurring task completed today must NOT reset on the same day."""
+    created = client.post("/tasks", json={"text": "daily", "recurring": True}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"done": True})
+    # list_tasks runs the daily reset; today's completion should persist
+    tasks = client.get("/tasks").json()
+    task = next(t for t in tasks if t["id"] == tid)
+    assert task["done"] is True
+
+
+def test_recurring_task_resets_next_day(client):
+    """A recurring task completed on a previous day comes back undone."""
+    import asyncio
+    from datetime import date, timedelta
+    from database import async_session
+    from models import Task
+    from sqlalchemy import select
+
+    created = client.post("/tasks", json={"text": "daily", "recurring": True}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"done": True})
+
+    # Simulate the completion happening yesterday.
+    async def _backdate():
+        async with async_session() as s:
+            task = (await s.execute(select(Task).where(Task.id == tid))).scalar_one()
+            task.last_completed_date = date.today() - timedelta(days=1)
+            await s.commit()
+    asyncio.run(_backdate())
+
+    # list_tasks should reset it to undone.
+    tasks = client.get("/tasks").json()
+    task = next(t for t in tasks if t["id"] == tid)
+    assert task["done"] is False
+
+

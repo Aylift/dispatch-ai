@@ -29,6 +29,7 @@ use tauri::{
 
 struct BackendProcess {
   child: Child,
+  pid: u32,
 }
 
 impl BackendProcess {
@@ -100,8 +101,9 @@ impl BackendProcess {
     );
     match cmd.spawn() {
       Ok(child) => {
-        log::info!("backend spawned (pid {:?})", child.id());
-        Some(Self { child })
+        let pid = child.id();
+        log::info!("backend spawned (pid {pid})");
+        Some(Self { child, pid })
       }
       Err(e) => {
         log::error!("failed to spawn backend: {e}");
@@ -111,8 +113,19 @@ impl BackendProcess {
   }
 
   fn stop(&mut self) {
+    // Kill the direct child first, then force-kill the whole process tree so
+    // uvicorn (and any worker it spawned) can't survive the HUD quitting.
     let _ = self.child.kill();
     let _ = self.child.wait();
+    #[cfg(windows)]
+    {
+      use std::os::windows::process::CommandExt;
+      use std::process::Command as StdCommand;
+      let _ = StdCommand::new("taskkill")
+        .args(["/PID", &self.pid.to_string(), "/T", "/F"])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .status();
+    }
     log::info!("backend process stopped");
   }
 }

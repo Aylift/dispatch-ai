@@ -246,7 +246,7 @@ test.describe('Dispatch AI - basic UI', () => {
     // Tag "today task" via its toggle button
     const todayTaskRow = page.locator('[data-testid="task-row"]', { hasText: 'today task' })
     await todayTaskRow.locator('[data-testid="toggle-today"]').click()
-    await expect(todayTaskRow.locator('[data-testid="toggle-today"]')).toContainText('TODAY')
+    await expect(todayTaskRow.locator('[data-testid="toggle-today"]')).toContainText('today')
 
     // Switch to TODAY tab: only the tagged task shows
     await page.locator('[data-testid="tab-today"]').click()
@@ -261,11 +261,11 @@ test.describe('Dispatch AI - basic UI', () => {
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'temp today' })
     await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('TODAY')
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('today')
 
     // Untag it
     await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today')
+    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('today')
 
     // TODAY tab is now empty
     await page.locator('[data-testid="tab-today"]').click()
@@ -297,6 +297,37 @@ test.describe('Dispatch AI - basic UI', () => {
     await expand.click()
     await expect(detail).toBeVisible()
     await expect(detail.locator('[data-testid="task-description-input"]')).toHaveValue('book flights and hotel for June')
+  })
+
+  test('recurring task auto-tags TODAY and floats to top with divider', async ({ page }) => {
+    // A normal today task
+    await page.locator('[data-testid="task-input"]').fill('normal today')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=normal today')).toBeVisible()
+    const normalRow = page.locator('[data-testid="task-row"]', { hasText: 'normal today' })
+    await normalRow.locator('[data-testid="toggle-today"]').click()
+    await expect(normalRow.locator('[data-testid="toggle-today"]')).toContainText('today')
+
+    // A recurring task
+    await page.locator('[data-testid="task-input"]').fill('daily habit')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=daily habit')).toBeVisible()
+    const recRow = page.locator('[data-testid="task-row"]', { hasText: 'daily habit' })
+    await recRow.locator('[data-testid="toggle-recurring"]').click()
+    await expect(recRow.locator('[data-testid="toggle-recurring"]')).toContainText('⟳')
+    // Recurring auto-adds the TODAY tag
+    await expect(recRow.locator('[data-testid="toggle-today"]')).toContainText('today')
+
+    // TODAY tab: recurring on top, divider present, normal below
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=daily habit')).toBeVisible()
+    await expect(page.locator('text=normal today')).toBeVisible()
+    await expect(page.locator('text=Recurring')).toBeVisible()
+
+    // Recurring task appears before the normal one in the DOM
+    const recPos = await page.locator('[data-testid="task-row"]', { hasText: 'daily habit' }).evaluate(el => el.getBoundingClientRect().top)
+    const normalPos = await page.locator('[data-testid="task-row"]', { hasText: 'normal today' }).evaluate(el => el.getBoundingClientRect().top)
+    expect(recPos).toBeLessThan(normalPos)
   })
 })
 

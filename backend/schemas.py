@@ -7,6 +7,7 @@ class TaskCreate(BaseModel):
     text: str
     description: Optional[str] = None
     priority: Optional[int] = Field(default=3, ge=1, le=5)
+    recurring: Optional[bool] = False
 
 
 class TaskUpdate(BaseModel):
@@ -15,6 +16,7 @@ class TaskUpdate(BaseModel):
     done: Optional[bool] = None
     priority: Optional[int] = Field(default=None, ge=1, le=5)
     tags: Optional[list[str]] = None
+    recurring: Optional[bool] = None
 
 
 class TaskParseIn(BaseModel):
@@ -28,6 +30,7 @@ class TaskOut(BaseModel):
     done: bool
     priority: int
     tags: list[str]
+    recurring: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

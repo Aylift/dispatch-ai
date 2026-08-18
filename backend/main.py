@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import json
 import asyncio
 import os
+from datetime import date
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
@@ -98,6 +99,21 @@ async def transcribe(file: UploadFile = File(...)):
 
 @app.get("/tasks", response_model=list[TaskOut])
 async def list_tasks(db: AsyncSession = Depends(get_db)):
+    # Daily reset for recurring tasks: any recurring task that was completed on a
+    # previous day comes back undone (it "resets every day").
+    today = date.today()
+    result = await db.execute(
+        select(Task).where(
+            Task.recurring == True,  # noqa: E712
+            Task.done == True,  # noqa: E712
+            (Task.last_completed_date.is_(None)) | (Task.last_completed_date < today),
+        )
+    )
+    for task in result.scalars().all():
+        task.done = False
+        task.last_completed_date = None
+    await db.commit()
+
     # Sort by priority (1=highest) first, then undone first, then newest
     result = await db.execute(
         select(Task)
@@ -108,7 +124,12 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
 
 @app.post("/tasks", response_model=TaskOut, status_code=201)
 async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
-    task = Task(text=body.text, description=body.description, priority=body.priority)
+    task = Task(
+        text=body.text,
+        description=body.description,
+        priority=body.priority,
+        recurring=body.recurring,
+    )
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -148,10 +169,17 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         task.description = body.description
     if body.done is not None:
         task.done = body.done
+        # Track the day a recurring task was completed so it can reset tomorrow.
+        if task.recurring:
+            task.last_completed_date = date.today() if body.done else None
     if body.priority is not None:
         task.priority = body.priority
     if body.tags is not None:
         task.tags = body.tags
+    if body.recurring is not None:
+        task.recurring = body.recurring
+        if not body.recurring:
+            task.last_completed_date = None
     await db.commit()
     await db.refresh(task)
     return task
