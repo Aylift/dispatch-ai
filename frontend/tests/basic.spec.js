@@ -316,7 +316,7 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=daily habit')).toBeVisible()
     const recRow = page.locator('[data-testid="task-row"]', { hasText: 'daily habit' })
     await recRow.locator('[data-testid="toggle-recurring"]').click()
-    await expect(recRow.locator('[data-testid="toggle-recurring"]')).toContainText('⟳', { timeout: 5000 })
+    await expect(recRow.locator('[data-testid="toggle-recurring"] svg')).toBeVisible({ timeout: 5000 })
     // Recurring auto-adds the TODAY tag
     await expect(recRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
@@ -342,7 +342,7 @@ test.describe('Dispatch AI - basic UI', () => {
     // Click Today: the button becomes a 3s undo countdown with a reverse arrow
     await row.locator('[data-testid="toggle-today"]').click()
     await expect(row.locator('[data-testid="undo-today"]')).toBeVisible()
-    await expect(row.locator('[data-testid="undo-today"]')).toContainText('↩')
+    await expect(row.locator('[data-testid="undo-today"] svg')).toBeVisible()
 
     // Cancel within the window: the toggle reverts, no commit happens
     await row.locator('[data-testid="undo-today"]').click()
@@ -363,7 +363,7 @@ test.describe('Dispatch AI - basic UI', () => {
 
     await row.locator('[data-testid="toggle-recurring"]').click()
     await expect(row.locator('[data-testid="undo-recurring"]')).toBeVisible()
-    await expect(row.locator('[data-testid="undo-recurring"]')).toContainText('↩')
+    await expect(row.locator('[data-testid="undo-recurring"] svg')).toBeVisible()
 
     await row.locator('[data-testid="undo-recurring"]').click()
     await expect(row.locator('[data-testid="toggle-recurring"]')).toBeVisible()
@@ -397,6 +397,64 @@ test.describe('Dispatch AI - basic UI', () => {
     await todayRow.locator('[data-testid="undo-today"]').click()
     await expect(todayRow.locator('[data-testid="toggle-today"]')).toBeVisible()
     await expect(page.locator('text=stay in today')).toBeVisible()
+  })
+
+  test('clear done does not delete recurring tasks', async ({ page }) => {
+    // A recurring task
+    await page.locator('[data-testid="task-input"]').fill('daily habit')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=daily habit')).toBeVisible()
+    const recRow = page.locator('[data-testid="task-row"]', { hasText: 'daily habit' })
+    await recRow.locator('[data-testid="toggle-recurring"]').click()
+    await expect(recRow.locator('[data-testid="toggle-recurring"] svg')).toBeVisible({ timeout: 5000 })
+
+    // A normal task to clear
+    await page.locator('[data-testid="task-input"]').fill('one off')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=one off')).toBeVisible()
+
+    // Mark both done
+    await page.locator('[data-testid="task-row"]', { hasText: 'daily habit' }).locator('input[type="checkbox"]').check()
+    await page.locator('[data-testid="task-row"]', { hasText: 'one off' }).locator('input[type="checkbox"]').check()
+
+    // Clear done
+    await page.locator('text=Clear done').click()
+
+    // Recurring survives, normal one-off is gone
+    await expect(page.locator('text=daily habit')).toBeVisible()
+    await expect(page.locator('text=one off')).not.toBeVisible()
+  })
+
+  test('per-task delete shows undo and reverts on cancel', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('delete me')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=delete me')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'delete me' })
+
+    // Click delete: the row turns into a 3s undo countdown and stays visible
+    await row.locator('[data-testid="task-delete"]').click()
+    await expect(row.locator('[data-testid="undo-delete"]')).toBeVisible()
+    await expect(row.locator('[data-testid="undo-delete"] svg')).toBeVisible()
+    await expect(page.locator('text=delete me')).toBeVisible()
+
+    // Cancel: the task is restored and stays
+    await row.locator('[data-testid="undo-delete"]').click()
+    await expect(row.locator('[data-testid="task-delete"]')).toBeVisible()
+    await expect(page.locator('text=delete me')).toBeVisible()
+  })
+
+  test('per-task delete commits after the undo window expires', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('really delete')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=really delete')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'really delete' })
+    await row.locator('[data-testid="task-delete"]').click()
+    await expect(row.locator('[data-testid="undo-delete"]')).toBeVisible()
+
+    // Wait for the 3s undo window to expire; the task is then deleted
+    await expect(page.locator('text=really delete')).not.toBeVisible({ timeout: 5000 })
   })
 })
 

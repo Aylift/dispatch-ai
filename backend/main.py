@@ -187,7 +187,12 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
 
 @app.delete("/tasks", status_code=204)
 async def clear_done_tasks(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task).where(Task.done == True))
+    # Recurring tasks are never bulk-deleted: they reset daily instead. Only
+    # non-recurring done tasks are cleared. To remove a recurring task, use the
+    # per-task DELETE /tasks/{id}.
+    result = await db.execute(
+        select(Task).where(Task.done == True, Task.recurring == False)  # noqa: E712
+    )
     tasks = result.scalars().all()
     for task in tasks:
         await db.delete(task)

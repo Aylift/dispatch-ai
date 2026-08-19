@@ -1,8 +1,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { checkHealth, withRetry, fetchTasks, createTask, parseTasks, updateTask, clearDoneTasks } from './api.js'
+import { checkHealth, withRetry, fetchTasks, createTask, parseTasks, updateTask, deleteTask, clearDoneTasks } from './api.js'
 import { useVoice } from './useVoice.js'
 import PriorityMeter from './components/PriorityMeter.vue'
+import AppIcon from './components/AppIcon.vue'
 import { invoke } from '@tauri-apps/api/core'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -341,6 +342,28 @@ function toggleRecurring(task) {
   )
 }
 
+// Delete a task. Same 3s undo window: the row turns into a "↩ Ns" button and
+// only actually deletes if the user doesn't cancel. The task stays in the list
+// during the countdown so the undo button remains visible; it's removed on
+// commit. Reverting is a no-op (nothing was removed yet).
+function removeTask(task) {
+  startUndo(
+    task.id, 'delete',
+    () => {},
+    async () => {
+      const index = tasks.value.findIndex(t => t.id === task.id)
+      if (index !== -1) tasks.value.splice(index, 1)
+      try {
+        await deleteTask(task.id)
+      } catch (err) {
+        console.error(err)
+        if (index !== -1) tasks.value.splice(index, 0, task)
+      }
+    },
+    3
+  )
+}
+
 // ---- Task detail expansion (single-click on the row) ---------------------
 // Clicking a task toggles an inline detail panel with the description editor.
 // The title is edited in place (single-click on the title), so there is no
@@ -486,7 +509,7 @@ onUnmounted(() => {
     <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-700/50" data-tauri-drag-region>
       <div>
         <h1 class="text-base font-semibold tracking-wider text-zinc-100">
-          <span class="text-sky-400">&#9670;</span> DISPATCH
+          <AppIcon name="diamond" class="w-3.5 h-3.5 inline-block text-sky-400 -mt-0.5" /> DISPATCH
         </h1>
         <p class="text-[11px] text-zinc-500">ai-powered task hud</p>
       </div>
@@ -495,10 +518,7 @@ onUnmounted(() => {
           v-if="appStatus === 'loading'"
           class="inline-flex items-center gap-1.5 text-[11px] text-amber-400/90"
         >
-          <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-          </svg>
+          <AppIcon name="spinner" class="w-3.5 h-3.5 animate-spin" />
           Loading…
         </span>
         <span
@@ -506,11 +526,7 @@ onUnmounted(() => {
           class="inline-flex items-center gap-1.5 text-[11px] text-red-400/90"
           title="Click to retry connecting"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M10.29 3.86 1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
+          <AppIcon name="alert" class="w-3.5 h-3.5" />
           Offline
         </span>
       </div>
@@ -520,10 +536,7 @@ onUnmounted(() => {
           class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1.5"
           title="Switch to light theme"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="4"/>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-          </svg>
+          <AppIcon name="sun" class="w-3.5 h-3.5" />
         </button>
         <button
           v-if="isTauri"
@@ -531,9 +544,7 @@ onUnmounted(() => {
           class="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 rounded hover:bg-zinc-800 flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-700/50"
           title="Hide HUD (restore from the system tray)"
         >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M5 18.5h14"/>
-          </svg>
+          <AppIcon name="minus" class="w-4 h-4" />
         </button>
       </div>
     </header>
@@ -570,7 +581,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div v-if="isListening" class="text-[11px] text-red-400/80 mt-1.5 mb-1 animate-pulse">
-        &#9679; Listening — tap the mic or press Enter when done
+        <AppIcon name="mic" class="w-3 h-3 inline-block -mt-0.5" /> Listening — tap the mic or press Enter when done
       </div>
       <div class="flex gap-2 mt-2">
         <button
@@ -581,11 +592,7 @@ onUnmounted(() => {
             : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 hover:border-zinc-600'"
           :title="isListening ? 'Tap to stop recording' : 'Start voice input'"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="2" width="6" height="11" rx="3"/>
-            <path d="M5 10a7 7 0 0114 0"/>
-            <path d="M12 19v3M8 22h8"/>
-          </svg>
+          <AppIcon name="mic" class="w-3.5 h-3.5" />
           {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
         <select
@@ -608,10 +615,7 @@ onUnmounted(() => {
             : 'bg-violet-500/10 text-violet-400 border border-violet-500/30 hover:bg-violet-500/20'"
           title="Let AI split this into prioritized tasks"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
-            <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/>
-          </svg>
+          <AppIcon name="sparkles" class="w-3.5 h-3.5" />
           {{ isParsing ? 'Parsing...' : 'Organize' }}
         </button>
         <button
@@ -700,7 +704,7 @@ onUnmounted(() => {
                 @click.stop="undoNow()"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
                 title="Undo — click to cancel"
-              >↩ {{ undo.remaining }}s</button>
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
               <button
                 v-else
                 data-testid="toggle-today"
@@ -717,7 +721,7 @@ onUnmounted(() => {
                 @click.stop="undoNow()"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
                 title="Undo — click to cancel"
-              >↩ {{ undo.remaining }}s</button>
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
               <button
                 v-else
                 data-testid="toggle-recurring"
@@ -727,13 +731,27 @@ onUnmounted(() => {
                   ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
                   : 'text-zinc-500 border-zinc-700/50 hover:text-violet-300 hover:border-violet-500/40'"
                 :title="item.task.recurring ? 'Remove recurring' : 'Make recurring (resets daily)'"
-              >{{ item.task.recurring ? '⟳' : 'Recur' }}</button>
+              ><AppIcon v-if="item.task.recurring" name="repeat" class="w-3 h-3 inline-block -mt-0.5" /><template v-else>Recur</template></button>
               <button
                 data-testid="task-expand"
                 @click.stop="toggleExpand(item.task)"
                 class="text-zinc-500 hover:text-sky-300 transition-colors shrink-0 cursor-pointer px-0.5"
                 :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
-              >{{ expandedId === item.task.id ? '▾' : '▸' }}</button>
+              ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5" /></button>
+              <button
+                v-if="undo && undo.taskId === item.task.id && undo.action === 'delete'"
+                data-testid="undo-delete"
+                @click.stop="undoNow()"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
+                title="Undo — click to cancel"
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
+              <button
+                v-else
+                data-testid="task-delete"
+                @click.stop="removeTask(item.task)"
+                class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 cursor-pointer px-0.5"
+                title="Delete task"
+              ><AppIcon name="trash" class="w-3.5 h-3.5" /></button>
             </div>
           </div>
           <div
@@ -759,7 +777,7 @@ onUnmounted(() => {
           </template>
       </TransitionGroup>
       <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-600">
-        <span class="text-2xl mb-2 opacity-30">&#9670;</span>
+        <AppIcon name="diamond" class="w-8 h-8 mb-2 opacity-30" />
         <p class="text-sm">No tasks yet</p>
         <p class="text-xs text-zinc-700 mt-1">Type something above to get started</p>
       </div>
@@ -794,7 +812,7 @@ onUnmounted(() => {
     <header class="flex-none flex items-center justify-between pb-3 mb-3 border-b border-zinc-200/80" data-tauri-drag-region>
       <div>
         <h1 class="text-base font-semibold tracking-wider text-zinc-800">
-          <span class="text-sky-500">&#9670;</span> DISPATCH
+          <AppIcon name="diamond" class="w-3.5 h-3.5 inline-block text-sky-500 -mt-0.5" /> DISPATCH
         </h1>
         <p class="text-[11px] text-zinc-400">ai-powered task hud</p>
       </div>
@@ -803,10 +821,7 @@ onUnmounted(() => {
           v-if="appStatus === 'loading'"
           class="inline-flex items-center gap-1.5 text-[11px] text-amber-500/90"
         >
-          <svg class="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-          </svg>
+          <AppIcon name="spinner" class="w-3.5 h-3.5 animate-spin" />
           Loading…
         </span>
         <span
@@ -814,11 +829,7 @@ onUnmounted(() => {
           class="inline-flex items-center gap-1.5 text-[11px] text-red-500/90"
           title="Click to retry connecting"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M10.29 3.86 1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
+          <AppIcon name="alert" class="w-3.5 h-3.5" />
           Offline
         </span>
       </div>
@@ -828,9 +839,7 @@ onUnmounted(() => {
           class="text-[11px] text-zinc-400 hover:text-zinc-600 transition-colors px-2 py-1 rounded hover:bg-zinc-100 flex items-center gap-1.5"
           title="Switch to dark theme"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-          </svg>
+          <AppIcon name="moon" class="w-3.5 h-3.5" />
         </button>
         <button
           v-if="isTauri"
@@ -838,9 +847,7 @@ onUnmounted(() => {
           class="text-[11px] text-zinc-400 hover:text-zinc-600 transition-colors px-2 py-1 rounded hover:bg-zinc-100 flex items-center gap-1.5 ml-2 pl-2 border-l border-zinc-200"
           title="Hide HUD (restore from the system tray)"
         >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <path d="M5 18.5h14"/>
-          </svg>
+          <AppIcon name="minus" class="w-4 h-4" />
         </button>
       </div>
     </header>
@@ -877,7 +884,7 @@ onUnmounted(() => {
         </div>
       </div>
       <div v-if="isListening" class="text-[11px] text-red-500/80 mt-1.5 mb-1 animate-pulse">
-        &#9679; Listening — tap the mic or press Enter when done
+        <AppIcon name="mic" class="w-3 h-3 inline-block -mt-0.5" /> Listening — tap the mic or press Enter when done
       </div>
       <div class="flex gap-2 mt-2">
         <button
@@ -888,11 +895,7 @@ onUnmounted(() => {
             : 'bg-zinc-100 text-zinc-500 border border-zinc-200 hover:text-zinc-700 hover:border-zinc-300'"
           :title="isListening ? 'Tap to stop recording' : 'Start voice input'"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="2" width="6" height="11" rx="3"/>
-            <path d="M5 10a7 7 0 0114 0"/>
-            <path d="M12 19v3M8 22h8"/>
-          </svg>
+          <AppIcon name="mic" class="w-3.5 h-3.5" />
           {{ isListening ? 'Tap to stop' : 'Voice' }}
         </button>
         <select
@@ -915,10 +918,7 @@ onUnmounted(() => {
             : 'bg-violet-500/10 text-violet-600 border border-violet-500/30 hover:bg-violet-500/20'"
           title="Let AI split this into prioritized tasks"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2z"/>
-            <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/>
-          </svg>
+          <AppIcon name="sparkles" class="w-3.5 h-3.5" />
           {{ isParsing ? 'Parsing...' : 'Organize' }}
         </button>
         <button
@@ -1007,7 +1007,7 @@ onUnmounted(() => {
                 @click.stop="undoNow()"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
                 title="Undo — click to cancel"
-              >↩ {{ undo.remaining }}s</button>
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
               <button
                 v-else
                 data-testid="toggle-today"
@@ -1024,7 +1024,7 @@ onUnmounted(() => {
                 @click.stop="undoNow()"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
                 title="Undo — click to cancel"
-              >↩ {{ undo.remaining }}s</button>
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
               <button
                 v-else
                 data-testid="toggle-recurring"
@@ -1034,13 +1034,27 @@ onUnmounted(() => {
                   ? 'bg-violet-500/15 text-violet-600 border-violet-500/40'
                   : 'text-zinc-400 border-zinc-200 hover:text-violet-600 hover:border-violet-400/50'"
                 :title="item.task.recurring ? 'Remove recurring' : 'Make recurring (resets daily)'"
-              >{{ item.task.recurring ? '⟳' : 'Recur' }}</button>
+              ><AppIcon v-if="item.task.recurring" name="repeat" class="w-3 h-3 inline-block -mt-0.5" /><template v-else>Recur</template></button>
               <button
                 data-testid="task-expand"
                 @click.stop="toggleExpand(item.task)"
                 class="text-zinc-400 hover:text-sky-600 transition-colors shrink-0 cursor-pointer px-0.5"
                 :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
-              >{{ expandedId === item.task.id ? '▾' : '▸' }}</button>
+              ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5" /></button>
+              <button
+                v-if="undo && undo.taskId === item.task.id && undo.action === 'delete'"
+                data-testid="undo-delete"
+                @click.stop="undoNow()"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
+                title="Undo — click to cancel"
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
+              <button
+                v-else
+                data-testid="task-delete"
+                @click.stop="removeTask(item.task)"
+                class="text-zinc-400 hover:text-red-600 transition-colors shrink-0 cursor-pointer px-0.5"
+                title="Delete task"
+              ><AppIcon name="trash" class="w-3.5 h-3.5" /></button>
             </div>
           </div>
           <div
@@ -1066,7 +1080,7 @@ onUnmounted(() => {
           </template>
       </TransitionGroup>
       <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-300">
-        <span class="text-2xl mb-2 opacity-40">&#9670;</span>
+        <AppIcon name="diamond" class="w-8 h-8 mb-2 opacity-40" />
         <p class="text-sm text-zinc-400">No tasks yet</p>
         <p class="text-xs text-zinc-300 mt-1">Type something above to get started</p>
       </div>

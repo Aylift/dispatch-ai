@@ -191,6 +191,20 @@ def test_clear_done(client):
     assert b["id"] in remaining
 
 
+def test_clear_done_preserves_recurring_tasks(client):
+    """Clear done must NOT delete recurring tasks (they reset daily instead)."""
+    rec = client.post("/tasks", json={"text": "daily habit", "recurring": True}).json()
+    normal = client.post("/tasks", json={"text": "one-off"}).json()
+    # mark both done
+    client.patch(f"/tasks/{rec['id']}", json={"done": True})
+    client.patch(f"/tasks/{normal['id']}", json={"done": True})
+    res = client.delete("/tasks")  # clear done
+    assert res.status_code == 204
+    remaining = [t["id"] for t in client.get("/tasks").json()]
+    assert rec["id"] in remaining  # recurring survives
+    assert normal["id"] not in remaining  # normal done task is cleared
+
+
 def test_delete_nonexistent_task(client):
     res = client.delete("/tasks/99999")
     assert res.status_code == 404
