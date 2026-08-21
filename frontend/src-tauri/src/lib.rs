@@ -126,7 +126,50 @@ impl BackendProcess {
         .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
         .status();
     }
+    // Belt-and-suspenders: also kill any process still bound to the backend
+    // port. A stale backend from a previous (crashed / force-killed) session
+    // can outlive the HUD and hold :8000, which shadows the fresh backend the
+    // next launch spawns. Killing by port guarantees a clean slate.
+    kill_port_8000();
     log::info!("backend process stopped");
+  }
+}
+
+/// Force-kill whatever is currently listening on the backend port (8000).
+/// Used on exit so a stale backend can never survive the HUD and shadow the
+/// next launch. Parses `netstat -ano` for the owning PID, then taskkills it.
+#[cfg(windows)]
+fn kill_port_8000() {
+  use std::os::windows::process::CommandExt;
+  use std::process::Command as StdCommand;
+  const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+  let out = StdCommand::new("netstat")
+    .args(["-ano"])
+    .creation_flags(CREATE_NO_WINDOW)
+    .output();
+  let Ok(out) = out else { return };
+  let Ok(text) = String::from_utf8(out.stdout) else { return };
+
+  let mut pids: Vec<String> = Vec::new();
+  for line in text.lines() {
+    // Match the local address bound to :8000 (LISTENING or ESTABLISHED).
+    if line.contains(":8000") && line.contains("LISTENING") {
+      if let Some(pid) = line.split_whitespace().last() {
+        if !pid.is_empty() && pid.chars().all(|c| c.is_ascii_digit()) {
+          pids.push(pid.to_string());
+        }
+      }
+    }
+  }
+  pids.sort();
+  pids.dedup();
+  for pid in pids {
+    log::info!("killing stale backend on :8000 (pid {pid})");
+    let _ = StdCommand::new("taskkill")
+      .args(["/PID", &pid, "/T", "/F"])
+      .creation_flags(CREATE_NO_WINDOW)
+      .status();
   }
 }
 

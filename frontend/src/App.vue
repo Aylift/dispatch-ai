@@ -306,6 +306,15 @@ function formatDuration(totalSeconds) {
   return `${sec}s`
 }
 
+// Compact "minutes elapsed / total minutes" label for the task row, e.g. "5/30m".
+// Only shown when the task has a timebox and is active/paused.
+function timeboxLabel(task) {
+  const total = task.timebox_minutes
+  if (!total) return null
+  const elapsedMin = Math.floor(effectiveElapsed(task) / 60)
+  return `${elapsedMin}/${total}m`
+}
+
 // Start / pause / resume a task. Starting auto-tags TODAY (backend does this
 // too, but we mirror it optimistically). Pausing keeps the TODAY tag.
 async function toggleFocus(task) {
@@ -841,6 +850,15 @@ onUnmounted(() => {
                 <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
                 <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
               </button>
+              <span
+                v-if="timeboxLabel(item.task)"
+                data-testid="task-timebox-label"
+                class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-medium"
+                :class="item.task.status === 'active'
+                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-300 border-amber-500/30'"
+                :title="`${Math.floor(effectiveElapsed(item.task) / 60)} min elapsed of ${item.task.timebox_minutes} min`"
+              >{{ timeboxLabel(item.task) }}</span>
               <button
                 v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
                 data-testid="task-reset"
@@ -1208,6 +1226,15 @@ onUnmounted(() => {
                 <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
                 <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
               </button>
+              <span
+                v-if="timeboxLabel(item.task)"
+                data-testid="task-timebox-label"
+                class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-medium"
+                :class="item.task.status === 'active'
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-600 border-amber-500/30'"
+                :title="`${Math.floor(effectiveElapsed(item.task) / 60)} min elapsed of ${item.task.timebox_minutes} min`"
+              >{{ timeboxLabel(item.task) }}</span>
               <button
                 v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
                 data-testid="task-reset"

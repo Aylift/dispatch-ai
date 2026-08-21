@@ -516,10 +516,14 @@ test.describe('Dispatch AI - basic UI', () => {
     await row.locator('[data-testid="task-focus"]').click()
     await expect(detail.locator('[data-testid="task-progress"]')).toBeVisible({ timeout: 5000 })
 
-    // Typing 0 clears the timebox and removes the progress bar
+    // The row shows a compact "elapsed/total min" label without opening the dropdown
+    await expect(row.locator('[data-testid="task-timebox-label"]')).toHaveText('0/35m')
+
+    // Typing 0 clears the timebox and removes the progress bar + row label
     await timebox.fill('0')
     await timebox.blur()
     await expect(detail.locator('[data-testid="task-progress"]')).not.toBeVisible()
+    await expect(row.locator('[data-testid="task-timebox-label"]')).not.toBeVisible()
   })
 
   test('reset timer zeroes elapsed time and stops the task', async ({ page }) => {
