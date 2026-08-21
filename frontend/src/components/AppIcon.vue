@@ -96,5 +96,16 @@ defineProps({
       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
     </template>
+
+    <!-- Play (start task) -->
+    <template v-else-if="name === 'play'">
+      <polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/>
+    </template>
+
+    <!-- Pause (pause task) -->
+    <template v-else-if="name === 'pause'">
+      <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>
+      <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>
+    </template>
   </svg>
 </template>

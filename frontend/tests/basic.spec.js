@@ -456,5 +456,87 @@ test.describe('Dispatch AI - basic UI', () => {
     // Wait for the 3s undo window to expire; the task is then deleted
     await expect(page.locator('text=really delete')).not.toBeVisible({ timeout: 5000 })
   })
+
+  test('starting a task shows a live timer and adds it to TODAY', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('focus task')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=focus task')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'focus task' })
+    // Start the task: the focus button turns into a pause button with a timer
+    await row.locator('[data-testid="task-focus"]').click()
+    await expect(row.locator('[data-testid="task-focus"] svg')).toBeVisible()
+    await expect(row.locator('[data-testid="task-focus"]')).toContainText(/s|m/, { timeout: 5000 })
+
+    // Starting auto-tags TODAY: the task appears in the TODAY tab
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=focus task')).toBeVisible()
+  })
+
+  test('pausing a task keeps it in TODAY and stops the timer', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('pause task')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=pause task')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'pause task' })
+    await row.locator('[data-testid="task-focus"]').click()
+    await expect(row.locator('[data-testid="task-focus"] svg')).toBeVisible()
+
+    // Pause: the button shows the play icon again but the timer text remains
+    await row.locator('[data-testid="task-focus"]').click()
+    await expect(row.locator('[data-testid="task-focus"]')).toContainText(/s|m/, { timeout: 5000 })
+
+    // Pausing keeps the TODAY tag: still visible in the TODAY tab
+    await page.locator('[data-testid="tab-today"]').click()
+    await expect(page.locator('text=pause task')).toBeVisible()
+  })
+
+  test('timebox input saves and shows a progress bar', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('timeboxed task')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=timeboxed task')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'timeboxed task' })
+    // Expand the detail panel
+    await row.locator('[data-testid="task-expand"]').click()
+    const detail = page.locator('[data-testid="task-detail"]')
+    await expect(detail).toBeVisible()
+
+    // Set a custom timebox by typing a value
+    const timebox = detail.locator('[data-testid="task-timebox-input"]')
+    await timebox.fill('30')
+    await timebox.blur()
+    await expect(timebox).toHaveValue('30')
+
+    // The stepper increments by 5
+    await detail.locator('[data-testid="timebox-plus"]').click()
+    await expect(timebox).toHaveValue('35')
+
+    // Starting the task reveals the progress bar container
+    await row.locator('[data-testid="task-focus"]').click()
+    await expect(detail.locator('[data-testid="task-progress"]')).toBeVisible({ timeout: 5000 })
+
+    // Typing 0 clears the timebox and removes the progress bar
+    await timebox.fill('0')
+    await timebox.blur()
+    await expect(detail.locator('[data-testid="task-progress"]')).not.toBeVisible()
+  })
+
+  test('reset timer zeroes elapsed time and stops the task', async ({ page }) => {
+    await page.locator('[data-testid="task-input"]').fill('reset task')
+    await page.locator('text=+ Add Task').click()
+    await expect(page.locator('text=reset task')).toBeVisible()
+
+    const row = page.locator('[data-testid="task-row"]', { hasText: 'reset task' })
+    // Start the task
+    await row.locator('[data-testid="task-focus"]').click()
+    await expect(row.locator('[data-testid="task-focus"]')).toContainText(/[0-9]s/, { timeout: 5000 })
+
+    // Reset the timer
+    await row.locator('[data-testid="task-reset"]').click()
+    await expect(row.locator('[data-testid="task-reset"]')).not.toBeVisible()
+    // The focus button returns to the idle "play" state (no elapsed shown)
+    await expect(row.locator('[data-testid="task-focus"]')).not.toContainText(/[0-9]s/)
+  })
 })
 

@@ -270,3 +270,87 @@ def test_recurring_task_resets_next_day(client):
     assert task["done"] is False
 
 
+def test_create_task_with_timebox(client):
+    res = client.post("/tasks", json={"text": "focused", "timebox_minutes": 25})
+    assert res.status_code == 201
+    data = res.json()
+    assert data["timebox_minutes"] == 25
+    assert data["status"] == "todo"
+    assert data["elapsed_seconds"] == 0
+
+
+def test_create_task_with_due_date(client):
+    res = client.post("/tasks", json={"text": "scheduled", "due_date": "2026-09-01"})
+    assert res.status_code == 201
+    assert res.json()["due_date"] == "2026-09-01"
+
+
+def test_start_task_sets_active_and_today(client):
+    created = client.post("/tasks", json={"text": "focus me"}).json()
+    tid = created["id"]
+    res = client.patch(f"/tasks/{tid}", json={"status": "active"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "active"
+    assert data["started_at"] is not None
+    # Starting a task naturally puts it in Today.
+    assert "TODAY" in data["tags"]
+
+
+def test_pause_task_keeps_today_and_accumulates_elapsed(client):
+    created = client.post("/tasks", json={"text": "focus me"}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"status": "active"})
+    res = client.patch(f"/tasks/{tid}", json={"status": "paused"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "paused"
+    assert data["started_at"] is None
+    # Pausing must NOT remove the TODAY tag.
+    assert "TODAY" in data["tags"]
+    # Some elapsed time was folded in.
+    assert data["elapsed_seconds"] >= 0
+
+
+def test_completing_task_stops_timer(client):
+    created = client.post("/tasks", json={"text": "focus me"}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"status": "active"})
+    res = client.patch(f"/tasks/{tid}", json={"done": True})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["done"] is True
+    assert data["status"] == "todo"
+    assert data["started_at"] is None
+
+
+def test_update_timebox(client):
+    created = client.post("/tasks", json={"text": "task"}).json()
+    tid = created["id"]
+    res = client.patch(f"/tasks/{tid}", json={"timebox_minutes": 45})
+    assert res.status_code == 200
+    assert res.json()["timebox_minutes"] == 45
+
+
+def test_clear_timebox(client):
+    created = client.post("/tasks", json={"text": "task"}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"timebox_minutes": 45})
+    res = client.patch(f"/tasks/{tid}", json={"timebox_minutes": None})
+    assert res.status_code == 200
+    assert res.json()["timebox_minutes"] is None
+
+
+def test_reset_elapsed(client):
+    created = client.post("/tasks", json={"text": "task"}).json()
+    tid = created["id"]
+    client.patch(f"/tasks/{tid}", json={"status": "active"})
+    client.patch(f"/tasks/{tid}", json={"status": "paused"})
+    res = client.patch(f"/tasks/{tid}", json={"reset_elapsed": True})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["elapsed_seconds"] == 0
+    assert body["status"] == "todo"
+    assert body["started_at"] is None
+
+

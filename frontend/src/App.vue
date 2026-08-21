@@ -257,12 +257,128 @@ async function handleParse() {
 
 async function toggleDone(task) {
   try {
-    await updateTask(task.id, { done: task.done })
+    const updated = await updateTask(task.id, { done: task.done })
+    task.status = updated.status
+    task.started_at = updated.started_at
+    task.elapsed_seconds = updated.elapsed_seconds
   } catch (err) {
     console.error(err)
     connectionError.value = 'Could not update task — backend unreachable.'
     appStatus.value = 'error'
   }
+}
+
+// ---- Focus / timeboxing --------------------------------------------------
+// Live clock tick so active tasks show a running elapsed timer. Re-renders the
+// displayed elapsed time every second without touching the backend.
+const nowTick = ref(Date.now())
+let clockTimer = null
+function startClock() {
+  if (clockTimer) return
+  clockTimer = setInterval(() => { nowTick.value = Date.now() }, 1000)
+}
+function stopClock() {
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null }
+}
+
+// Effective elapsed seconds for a task: accumulated + live running time.
+function effectiveElapsed(task) {
+  let base = task.elapsed_seconds || 0
+  if (task.status === 'active' && task.started_at) {
+    let iso = task.started_at
+    // The backend stores started_at in UTC but SQLite returns it without a
+    // timezone suffix. Treat a naive string as UTC so the live timer isn't
+    // skewed by the local UTC offset (e.g. +2h in Warsaw).
+    if (!/[zZ]|[+-]\d\d:\d\d$/.test(iso)) iso += 'Z'
+    const started = new Date(iso).getTime()
+    base += Math.max(0, Math.floor((nowTick.value - started) / 1000))
+  }
+  return base
+}
+
+function formatDuration(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`
+  if (m > 0) return `${m}m ${String(sec).padStart(2, '0')}s`
+  return `${sec}s`
+}
+
+// Start / pause / resume a task. Starting auto-tags TODAY (backend does this
+// too, but we mirror it optimistically). Pausing keeps the TODAY tag.
+async function toggleFocus(task) {
+  const next = task.status === 'active' ? 'paused' : 'active'
+  const prev = { status: task.status, started_at: task.started_at, tags: task.tags || [] }
+  // Optimistic update
+  task.status = next
+  if (next === 'active') {
+    task.started_at = new Date().toISOString()
+    if (!hasTag(task, TODAY_TAG)) task.tags = [...(task.tags || []), TODAY_TAG]
+  } else {
+    task.started_at = null
+  }
+  try {
+    const updated = await updateTask(task.id, { status: next })
+    task.status = updated.status
+    task.started_at = updated.started_at
+    task.elapsed_seconds = updated.elapsed_seconds
+    task.tags = updated.tags
+  } catch (err) {
+    console.error(err)
+    task.status = prev.status
+    task.started_at = prev.started_at
+    task.tags = prev.tags
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+// Reset the focus timer: zero elapsed time and return the task to idle (todo).
+async function resetTimer(task) {
+  const prev = { status: task.status, started_at: task.started_at, elapsed_seconds: task.elapsed_seconds }
+  task.status = 'todo'
+  task.started_at = null
+  task.elapsed_seconds = 0
+  try {
+    const updated = await updateTask(task.id, { reset_elapsed: true })
+    task.status = updated.status
+    task.started_at = updated.started_at
+    task.elapsed_seconds = updated.elapsed_seconds
+  } catch (err) {
+    console.error(err)
+    task.status = prev.status
+    task.started_at = prev.started_at
+    task.elapsed_seconds = prev.elapsed_seconds
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+async function saveTimebox(task, minutes) {
+  // 0, empty, or null all mean "no timebox" (cleared).
+  const val = minutes === '' || minutes == null || Number(minutes) <= 0 ? null : Math.floor(Number(minutes))
+  if (val === (task.timebox_minutes ?? null)) return
+  try {
+    const updated = await updateTask(task.id, { timebox_minutes: val })
+    task.timebox_minutes = updated.timebox_minutes
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+// Step the timebox up/down by 5 minutes. Going to 0 or below clears it (null).
+async function adjustTimebox(task, delta) {
+  const current = task.timebox_minutes ?? 0
+  const next = current + delta
+  if (next <= 0) {
+    await saveTimebox(task, null)
+    return
+  }
+  await saveTimebox(task, next)
 }
 
 async function clearDone() {
@@ -494,10 +610,12 @@ onMounted(async () => {
   startWatchdog()
   await connect()
   loadMics()
+  startClock()
 })
 
 onUnmounted(() => {
   stopWatchdog()
+  stopClock()
 })
 </script>
 <template>
@@ -662,7 +780,11 @@ onUnmounted(() => {
           <div
             data-testid="task-row"
             class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
-            :class="item.task.done ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/50'"
+            :class="item.task.done
+              ? 'bg-zinc-800/30'
+              : item.task.status === 'active'
+                ? 'bg-emerald-500/10 ring-1 ring-emerald-500/40'
+                : 'hover:bg-zinc-800/50'"
           >
             <input
               type="checkbox"
@@ -706,7 +828,27 @@ onUnmounted(() => {
                 title="Undo — click to cancel"
               ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
               <button
-                v-else
+                data-testid="task-focus"
+                @click.stop="toggleFocus(item.task)"
+                class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+                :class="item.task.status === 'active'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                  : item.task.status === 'paused'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'text-zinc-500 border-zinc-700/50 hover:text-emerald-300 hover:border-emerald-500/40'"
+                :title="item.task.status === 'active' ? 'Pause task' : 'Start task'"
+              >
+                <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
+                <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
+              </button>
+              <button
+                v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
+                data-testid="task-reset"
+                @click.stop="resetTimer(item.task)"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer text-zinc-500 border-zinc-700/50 hover:text-red-400 hover:border-red-500/40"
+                title="Reset timer"
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /></button>
+              <button
                 data-testid="toggle-today"
                 @click.stop="toggleToday(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -762,6 +904,46 @@ onUnmounted(() => {
             <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
               <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
               <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2 text-[10px] text-zinc-500">
+              <label class="shrink-0">Timebox</label>
+              <div class="flex items-center rounded-md border border-zinc-700/60 overflow-hidden" data-testid="task-timebox">
+                <button
+                  data-testid="timebox-minus"
+                  @click.stop="adjustTimebox(item.task, -5)"
+                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+                  title="Decrease by 5 min"
+                >−</button>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  :value="item.task.timebox_minutes ?? ''"
+                  data-testid="task-timebox-input"
+                  @change="saveTimebox(item.task, $event.target.value)"
+                  @keydown.enter="$event.target.blur()"
+                  placeholder="–"
+                  class="w-12 px-1 py-0.5 text-center text-xs text-zinc-200 placeholder-zinc-600 tabular-nums bg-transparent focus:outline-none appearance-none"
+                />
+                <button
+                  data-testid="timebox-plus"
+                  @click.stop="adjustTimebox(item.task, 5)"
+                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+                  title="Increase by 5 min"
+                >+</button>
+              </div>
+              <span class="shrink-0">min</span>
+              <span v-if="item.task.status === 'active' || item.task.status === 'paused'" class="shrink-0 text-zinc-400">{{ formatDuration(effectiveElapsed(item.task)) }} elapsed</span>
+            </div>
+            <div
+              v-if="item.task.timebox_minutes"
+              data-testid="task-progress"
+              class="mb-2 h-1.5 rounded-full bg-zinc-800 overflow-hidden"
+            >
+              <div
+                class="h-full rounded-full transition-all"
+                :class="effectiveElapsed(item.task) >= item.task.timebox_minutes * 60 ? 'bg-red-500' : 'bg-emerald-500'"
+                :style="{ width: Math.min(100, (effectiveElapsed(item.task) / (item.task.timebox_minutes * 60)) * 100) + '%' }"
+              ></div>
             </div>
             <textarea
               ref="descInputEl"
@@ -965,7 +1147,11 @@ onUnmounted(() => {
           <div
             data-testid="task-row"
             class="flex items-center gap-3 px-3 py-2 rounded-md transition-all"
-            :class="item.task.done ? 'bg-zinc-50/50' : 'hover:bg-zinc-50'"
+            :class="item.task.done
+              ? 'bg-zinc-50/50'
+              : item.task.status === 'active'
+                ? 'bg-emerald-500/10 ring-1 ring-emerald-500/40'
+                : 'hover:bg-zinc-50'"
           >
             <input
               type="checkbox"
@@ -1009,7 +1195,27 @@ onUnmounted(() => {
                 title="Undo — click to cancel"
               ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
               <button
-                v-else
+                data-testid="task-focus"
+                @click.stop="toggleFocus(item.task)"
+                class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
+                :class="item.task.status === 'active'
+                  ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40'
+                  : item.task.status === 'paused'
+                    ? 'bg-amber-500/15 text-amber-600 border-amber-500/40'
+                    : 'text-zinc-400 border-zinc-200 hover:text-emerald-600 hover:border-emerald-400/50'"
+                :title="item.task.status === 'active' ? 'Pause task' : 'Start task'"
+              >
+                <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
+                <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
+              </button>
+              <button
+                v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
+                data-testid="task-reset"
+                @click.stop="resetTimer(item.task)"
+                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer text-zinc-400 border-zinc-200 hover:text-red-600 hover:border-red-400/50"
+                title="Reset timer"
+              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /></button>
+              <button
                 data-testid="toggle-today"
                 @click.stop="toggleToday(item.task)"
                 class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -1065,6 +1271,46 @@ onUnmounted(() => {
             <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
               <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
               <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2 text-[10px] text-zinc-500">
+              <label class="shrink-0">Timebox</label>
+              <div class="flex items-center rounded-md border border-zinc-200 overflow-hidden" data-testid="task-timebox">
+                <button
+                  data-testid="timebox-minus"
+                  @click.stop="adjustTimebox(item.task, -5)"
+                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                  title="Decrease by 5 min"
+                >−</button>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  :value="item.task.timebox_minutes ?? ''"
+                  data-testid="task-timebox-input"
+                  @change="saveTimebox(item.task, $event.target.value)"
+                  @keydown.enter="$event.target.blur()"
+                  placeholder="–"
+                  class="w-12 px-1 py-0.5 text-center text-xs text-zinc-700 placeholder-zinc-400 tabular-nums bg-transparent focus:outline-none appearance-none"
+                />
+                <button
+                  data-testid="timebox-plus"
+                  @click.stop="adjustTimebox(item.task, 5)"
+                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                  title="Increase by 5 min"
+                >+</button>
+              </div>
+              <span class="shrink-0">min</span>
+              <span v-if="item.task.status === 'active' || item.task.status === 'paused'" class="shrink-0 text-zinc-400">{{ formatDuration(effectiveElapsed(item.task)) }} elapsed</span>
+            </div>
+            <div
+              v-if="item.task.timebox_minutes"
+              data-testid="task-progress"
+              class="mb-2 h-1.5 rounded-full bg-zinc-200 overflow-hidden"
+            >
+              <div
+                class="h-full rounded-full transition-all"
+                :class="effectiveElapsed(item.task) >= item.task.timebox_minutes * 60 ? 'bg-red-500' : 'bg-emerald-500'"
+                :style="{ width: Math.min(100, (effectiveElapsed(item.task) / (item.task.timebox_minutes * 60)) * 100) + '%' }"
+              ></div>
             </div>
             <textarea
               ref="descInputEl"

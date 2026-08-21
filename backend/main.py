@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import json
 import asyncio
 import os
-from datetime import date
+from datetime import date, datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
@@ -129,6 +129,8 @@ async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
         description=body.description,
         priority=body.priority,
         recurring=body.recurring,
+        timebox_minutes=body.timebox_minutes,
+        due_date=body.due_date,
     )
     db.add(task)
     await db.commit()
@@ -157,6 +159,17 @@ async def parse_and_create_tasks(body: TaskParseIn, db: AsyncSession = Depends(g
     return created
 
 
+def _finalize_elapsed(task: Task) -> None:
+    """Fold any running time into elapsed_seconds and clear started_at."""
+    if task.started_at is not None:
+        now = datetime.now(timezone.utc)
+        started = task.started_at
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        task.elapsed_seconds += max(0, int((now - started).total_seconds()))
+        task.started_at = None
+
+
 @app.patch("/tasks/{task_id}", response_model=TaskOut)
 async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Task).where(Task.id == task_id))
@@ -172,6 +185,10 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         # Track the day a recurring task was completed so it can reset tomorrow.
         if task.recurring:
             task.last_completed_date = date.today() if body.done else None
+        # Completing (or un-completing) stops any running timer.
+        _finalize_elapsed(task)
+        if body.done:
+            task.status = "todo"
     if body.priority is not None:
         task.priority = body.priority
     if body.tags is not None:
@@ -180,6 +197,31 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         task.recurring = body.recurring
         if not body.recurring:
             task.last_completed_date = None
+    if "timebox_minutes" in body.model_fields_set:
+        task.timebox_minutes = body.timebox_minutes
+    if body.due_date is not None:
+        task.due_date = body.due_date
+    if body.status is not None:
+        if body.status == "active":
+            # Starting: fold any prior running time, then begin a fresh session.
+            _finalize_elapsed(task)
+            task.status = "active"
+            task.started_at = datetime.now(timezone.utc)
+            # Starting a task naturally puts it in Today.
+            if "TODAY" not in (task.tags or []):
+                task.tags = (task.tags or []) + ["TODAY"]
+        elif body.status == "paused":
+            # Pausing: keep the TODAY tag (stays in Today), just stop the clock.
+            _finalize_elapsed(task)
+            task.status = "paused"
+        elif body.status == "todo":
+            _finalize_elapsed(task)
+            task.status = "todo"
+    if body.reset_elapsed:
+        # Reset the focus timer: zero accumulated time and stop any running session.
+        task.elapsed_seconds = 0
+        task.started_at = None
+        task.status = "todo"
     await db.commit()
     await db.refresh(task)
     return task
