@@ -112,6 +112,11 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
     for task in result.scalars().all():
         task.done = False
         task.last_completed_date = None
+        # A fresh day means a fresh focus timer: stop any running session and
+        # zero the accumulated elapsed time so the recurring task starts clean.
+        task.status = "todo"
+        task.started_at = None
+        task.elapsed_seconds = 0
     await db.commit()
 
     # Sort by priority (1=highest) first, then undone first, then newest

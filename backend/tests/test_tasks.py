@@ -270,6 +270,38 @@ def test_recurring_task_resets_next_day(client):
     assert task["done"] is False
 
 
+def test_recurring_task_reset_clears_timer_next_day(client):
+    """A recurring task's focus timer resets when it rolls over to a new day."""
+    import asyncio
+    from datetime import date, timedelta
+    from database import async_session
+    from models import Task
+    from sqlalchemy import select
+
+    created = client.post("/tasks", json={"text": "daily", "recurring": True}).json()
+    tid = created["id"]
+    # Start the timer and accumulate some elapsed time.
+    client.patch(f"/tasks/{tid}", json={"status": "active"})
+    client.patch(f"/tasks/{tid}", json={"status": "paused"})
+    client.patch(f"/tasks/{tid}", json={"done": True})
+
+    # Simulate the completion happening yesterday.
+    async def _backdate():
+        async with async_session() as s:
+            task = (await s.execute(select(Task).where(Task.id == tid))).scalar_one()
+            task.last_completed_date = date.today() - timedelta(days=1)
+            task.elapsed_seconds = 600
+            await s.commit()
+    asyncio.run(_backdate())
+
+    # list_tasks should reset it to undone AND clear the timer.
+    tasks = client.get("/tasks").json()
+    task = next(t for t in tasks if t["id"] == tid)
+    assert task["done"] is False
+    assert task["status"] == "todo"
+    assert task["elapsed_seconds"] == 0
+
+
 def test_create_task_with_timebox(client):
     res = client.post("/tasks", json={"text": "focused", "timebox_minutes": 25})
     assert res.status_code == 201

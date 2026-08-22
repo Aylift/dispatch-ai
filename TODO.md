@@ -6,7 +6,6 @@ Features:
 - recurring tasks
 - notifications, reminders
 - Smart deduplication / caching (Redis) — As tasks grow, the LLM re-parsing or re-transcribing the same input wastes money and time. Redis can cache "this exact voice snippet already resolved to these tasks" so it's instant and costs $0 the second time.
-- timebox
 - paging
 - split front to components
 - same animation as for list rows for sort buttons, cause it's jumping
