@@ -301,7 +301,7 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(detail.locator('[data-testid="task-description-input"]')).toHaveValue('book flights and hotel for June')
   })
 
-  test('recurring task auto-tags TODAY and floats to top with divider', async ({ page }) => {
+  test('recurring task auto-tags TODAY and sits below the divider', async ({ page }) => {
     // A normal today task
     await page.locator('[data-testid="task-input"]').fill('normal today')
     await page.locator('text=+ Add Task').click()
@@ -320,16 +320,16 @@ test.describe('Dispatch AI - basic UI', () => {
     // Recurring auto-adds the TODAY tag
     await expect(recRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
 
-    // TODAY tab: recurring on top, divider present, normal below
+    // TODAY tab: normal on top, divider present, recurring below
     await page.locator('[data-testid="tab-today"]').click()
     await expect(page.locator('text=daily habit')).toBeVisible()
     await expect(page.locator('text=normal today')).toBeVisible()
     await expect(page.locator('text=Recurring')).toBeVisible()
 
-    // Recurring task appears before the normal one in the DOM
+    // Recurring task appears after the normal one in the DOM
     const recPos = await page.locator('[data-testid="task-row"]', { hasText: 'daily habit' }).evaluate(el => el.getBoundingClientRect().top)
     const normalPos = await page.locator('[data-testid="task-row"]', { hasText: 'normal today' }).evaluate(el => el.getBoundingClientRect().top)
-    expect(recPos).toBeLessThan(normalPos)
+    expect(recPos).toBeGreaterThan(normalPos)
   })
 
   test('undo arrow cancels the Today toggle before it commits', async ({ page }) => {

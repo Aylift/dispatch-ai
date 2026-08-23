@@ -93,8 +93,8 @@ const visibleTasks = computed(() => {
   return sortedTasks.value
 })
 
-// In the TODAY tab, recurring tasks float to the top, separated from the
-// normal today tasks by a divider.
+// In the TODAY tab, normal tasks come first, then a divider, then the
+// recurring tasks below it.
 const todayRecurring = computed(() =>
   visibleTasks.value.filter(t => t.recurring)
 )
@@ -102,12 +102,12 @@ const todayNormal = computed(() =>
   visibleTasks.value.filter(t => !t.recurring)
 )
 
-// Flat list for the TODAY tab: recurring tasks, then a divider, then normal.
+// Flat list for the TODAY tab: normal tasks, then a divider, then recurring.
 const todayList = computed(() => {
   const items = []
-  for (const t of todayRecurring.value) items.push({ type: 'task', task: t })
-  if (todayRecurring.value.length && todayNormal.value.length) items.push({ type: 'divider' })
   for (const t of todayNormal.value) items.push({ type: 'task', task: t })
+  if (todayRecurring.value.length && todayNormal.value.length) items.push({ type: 'divider' })
+  for (const t of todayRecurring.value) items.push({ type: 'task', task: t })
   return items
 })
 
