@@ -15,6 +15,9 @@ const isListening = ref(false)
 const isParsing = ref(false)
 const selectedPriority = ref(3)
 const sortMode = ref('priority') // 'priority' | 'created'
+// 0 = Priority, 1 = Created. Drives the sliding highlight pill between the
+// sort buttons so switching modes glides instead of jumping.
+const sortPillPos = computed(() => (sortMode.value === 'created' ? 1 : 0))
 const view = ref('today')        // 'all' | 'today' — which tab is shown (TODAY is default)
 const TODAY_TAG = 'TODAY'
 const RECURRING_TAG = 'RECURRING'
@@ -983,18 +986,24 @@ onUnmounted(() => {
       </div>
       <div class="flex items-center justify-center gap-1 pt-3 pb-1 text-[11px]">
         <span class="text-zinc-500 mr-1">sort</span>
-        <button
-          data-testid="sort-priority"
-          @click="sortMode = 'priority'"
-          class="px-1.5 py-0.5 rounded transition-colors"
-          :class="sortMode === 'priority' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-        >Priority</button>
-        <button
-          data-testid="sort-created"
-          @click="sortMode = 'created'"
-          class="px-1.5 py-0.5 rounded transition-colors"
-          :class="sortMode === 'created' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-        >Created</button>
+        <div class="relative flex rounded bg-zinc-800/60 p-0.5">
+          <span
+            class="absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded bg-zinc-700 transition-transform duration-300 ease"
+            :style="{ transform: `translateX(${sortPillPos * 100}%)` }"
+          ></span>
+          <button
+            data-testid="sort-priority"
+            @click="sortMode = 'priority'"
+            class="relative z-10 px-2 py-0.5 rounded transition-colors"
+            :class="sortMode === 'priority' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+          >Priority</button>
+          <button
+            data-testid="sort-created"
+            @click="sortMode = 'created'"
+            class="relative z-10 px-2 py-0.5 rounded transition-colors"
+            :class="sortMode === 'created' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+          >Created</button>
+        </div>
       </div>
     </div>
 
@@ -1359,18 +1368,24 @@ onUnmounted(() => {
       </div>
       <div class="flex items-center justify-center gap-1 pt-3 pb-1 text-[11px]">
         <span class="text-zinc-400 mr-1">sort</span>
-        <button
-          data-testid="sort-priority"
-          @click="sortMode = 'priority'"
-          class="px-1.5 py-0.5 rounded transition-colors"
-          :class="sortMode === 'priority' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
-        >Priority</button>
-        <button
-          data-testid="sort-created"
-          @click="sortMode = 'created'"
-          class="px-1.5 py-0.5 rounded transition-colors"
-          :class="sortMode === 'created' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
-        >Created</button>
+        <div class="relative flex rounded bg-zinc-200/70 p-0.5">
+          <span
+            class="absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded bg-white shadow-sm transition-transform duration-300 ease"
+            :style="{ transform: `translateX(${sortPillPos * 100}%)` }"
+          ></span>
+          <button
+            data-testid="sort-priority"
+            @click="sortMode = 'priority'"
+            class="relative z-10 px-2 py-0.5 rounded transition-colors"
+            :class="sortMode === 'priority' ? 'text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+          >Priority</button>
+          <button
+            data-testid="sort-created"
+            @click="sortMode = 'created'"
+            class="relative z-10 px-2 py-0.5 rounded transition-colors"
+            :class="sortMode === 'created' ? 'text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+          >Created</button>
+        </div>
       </div>
     </div>
 
