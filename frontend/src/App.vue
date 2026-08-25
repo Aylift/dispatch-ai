@@ -978,13 +978,7 @@ onUnmounted(() => {
           </div>
           </div>
           </template>
-      </TransitionGroup>
-      <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-600">
-        <AppIcon name="diamond" class="w-8 h-8 mb-2 opacity-30" />
-        <p class="text-sm">No tasks yet</p>
-        <p class="text-xs text-zinc-700 mt-1">Type something above to get started</p>
-      </div>
-      <div class="flex items-center justify-center gap-1 pt-3 pb-1 text-[11px]">
+      <div key="sort-row" class="flex items-center justify-center gap-1 pt-3 pb-1 text-[11px]">
         <span class="text-zinc-500 mr-1">sort</span>
         <div class="relative flex rounded bg-zinc-800/60 p-0.5">
           <span
@@ -1004,6 +998,12 @@ onUnmounted(() => {
             :class="sortMode === 'created' ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
           >Created</button>
         </div>
+      </div>
+      </TransitionGroup>
+      <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-600">
+        <AppIcon name="diamond" class="w-8 h-8 mb-2 opacity-30" />
+        <p class="text-sm">No tasks yet</p>
+        <p class="text-xs text-zinc-700 mt-1">Type something above to get started</p>
       </div>
     </div>
 
@@ -1360,13 +1360,7 @@ onUnmounted(() => {
           </div>
           </div>
           </template>
-      </TransitionGroup>
-      <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-300">
-        <AppIcon name="diamond" class="w-8 h-8 mb-2 opacity-40" />
-        <p class="text-sm text-zinc-400">No tasks yet</p>
-        <p class="text-xs text-zinc-300 mt-1">Type something above to get started</p>
-      </div>
-      <div class="flex items-center justify-center gap-1 pt-3 pb-1 text-[11px]">
+      <div key="sort-row" class="flex items-center justify-center gap-1 pt-3 pb-1 text-[11px]">
         <span class="text-zinc-400 mr-1">sort</span>
         <div class="relative flex rounded bg-zinc-200/70 p-0.5">
           <span
@@ -1386,6 +1380,12 @@ onUnmounted(() => {
             :class="sortMode === 'created' ? 'text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
           >Created</button>
         </div>
+      </div>
+      </TransitionGroup>
+      <div v-if="appStatus==='ready' && tasks.length === 0" class="flex flex-col items-center justify-center py-12 text-zinc-300">
+        <AppIcon name="diamond" class="w-8 h-8 mb-2 opacity-40" />
+        <p class="text-sm text-zinc-400">No tasks yet</p>
+        <p class="text-xs text-zinc-300 mt-1">Type something above to get started</p>
       </div>
     </div>
 
