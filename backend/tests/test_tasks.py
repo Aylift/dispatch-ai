@@ -386,3 +386,19 @@ def test_reset_elapsed(client):
     assert body["started_at"] is None
 
 
+def test_settings_default_page_size(client):
+    res = client.get("/settings")
+    assert res.status_code == 200
+    assert res.json()["page_size"] == 10
+
+
+def test_settings_update_page_size(client):
+    res = client.patch("/settings", json={"page_size": 25})
+    assert res.status_code == 200
+    assert res.json()["page_size"] == 25
+    # Persisted — a fresh GET returns the updated value.
+    res = client.get("/settings")
+    assert res.status_code == 200
+    assert res.json()["page_size"] == 25
+
+

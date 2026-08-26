@@ -70,3 +70,18 @@ export async function clearDoneTasks() {
   if (!res.ok) throw new Error('Failed to clear done tasks')
 }
 
+export async function fetchSettings() {
+  const res = await fetch(`${BASE}/settings`)
+  if (!res.ok) throw new Error('Failed to fetch settings')
+  return res.json()
+}
+
+export async function updateSettings(data) {
+  const res = await fetch(`${BASE}/settings`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error('Failed to update settings')
+  return res.json()
+}

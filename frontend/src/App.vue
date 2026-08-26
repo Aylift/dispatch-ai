@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { checkHealth, withRetry, fetchTasks, createTask, parseTasks, updateTask, deleteTask, clearDoneTasks } from './api.js'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { checkHealth, withRetry, fetchTasks, createTask, parseTasks, updateTask, deleteTask, clearDoneTasks, fetchSettings, updateSettings } from './api.js'
 import { useVoice } from './useVoice.js'
 import PriorityMeter from './components/PriorityMeter.vue'
 import AppIcon from './components/AppIcon.vue'
@@ -115,9 +115,44 @@ const todayList = computed(() => {
 })
 
 // List actually rendered: TODAY tab uses the grouped list, All uses everything.
-const renderList = computed(() =>
+const fullList = computed(() =>
   view.value === 'today' ? todayList.value : visibleTasks.value.map(t => ({ type: 'task', task: t }))
 )
+
+// ---- Paging ---------------------------------------------------------------
+// Customizable page size (persisted in the settings table). Paging is purely
+// frontend: we slice the fully sorted/filtered list, so sorting, TODAY grouping
+// and the recurring divider all keep working regardless of page size.
+const PAGE_SIZE_OPTIONS = [5, 10, 25, 50]
+const pageSize = ref(10)
+const page = ref(1)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(fullList.value.length / pageSize.value)))
+const renderList = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return fullList.value.slice(start, start + pageSize.value)
+})
+
+function setPageSize(size) {
+  pageSize.value = size
+  page.value = 1
+  updateSettings({ page_size: size }).catch(err => console.error('save page size failed:', err))
+}
+
+async function loadSettings() {
+  try {
+    const s = await fetchSettings()
+    if (s?.page_size) pageSize.value = s.page_size
+  } catch (err) {
+    console.error('loadSettings failed:', err)
+  }
+}
+
+// If tasks are deleted/cleared and the current page no longer exists, fall back
+// to the last valid page instead of showing an empty list.
+watch(totalPages, (n) => {
+  if (page.value > n) page.value = n
+})
 
 const sortedTasks = computed(() => {
   if (sortMode.value === 'created') {
@@ -621,6 +656,7 @@ function onTextareaKeydown(event) {
 onMounted(async () => {
   startWatchdog()
   await connect()
+  await loadSettings()
   loadMics()
   startClock()
 })
@@ -765,19 +801,47 @@ onUnmounted(() => {
     </div>
 
     <div class="flex-1 overflow-y-auto">
-      <div class="flex items-center gap-1 mb-2 text-[11px]">
-        <button
-          data-testid="tab-today"
-          @click="view = 'today'"
-          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
-          :class="view === 'today' ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-500 hover:text-zinc-300'"
-        >TODAY</button>
-        <button
-          data-testid="tab-all"
-          @click="view = 'all'"
-          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
-          :class="view === 'all' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
-        >All</button>
+      <div class="flex items-center justify-between mb-2 text-[11px]">
+        <div class="flex items-center gap-1">
+          <button
+            data-testid="tab-today"
+            @click="view = 'today'"
+            class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+            :class="view === 'today' ? 'bg-sky-500/20 text-sky-300' : 'text-zinc-500 hover:text-zinc-300'"
+          >TODAY</button>
+          <button
+            data-testid="tab-all"
+            @click="view = 'all'"
+            class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+            :class="view === 'all' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'"
+          >All</button>
+        </div>
+        <div class="flex items-center gap-1.5" data-testid="paging">
+          <span class="text-zinc-500">Page</span>
+          <button
+            data-testid="page-prev"
+            @click="page = Math.max(1, page - 1)"
+            :disabled="page <= 1"
+            class="px-1.5 py-0.5 rounded border border-zinc-700/50 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            :class="page > 1 ? 'text-zinc-300 hover:border-zinc-500' : 'text-zinc-600'"
+          >‹</button>
+          <span class="text-zinc-400 tabular-nums">{{ page }} / {{ totalPages }}</span>
+          <button
+            data-testid="page-next"
+            @click="page = Math.min(totalPages, page + 1)"
+            :disabled="page >= totalPages"
+            class="px-1.5 py-0.5 rounded border border-zinc-700/50 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            :class="page < totalPages ? 'text-zinc-300 hover:border-zinc-500' : 'text-zinc-600'"
+          >›</button>
+          <select
+            data-testid="page-size"
+            :value="pageSize"
+            @change="setPageSize(Number($event.target.value))"
+            class="bg-zinc-800 border border-zinc-700/50 rounded px-1 py-0.5 text-zinc-300 cursor-pointer outline-none"
+          >
+            <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </div>
       </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
         <template v-for="item in renderList" :key="item.type === 'divider' ? 'recurring-divider' : item.task.id">
@@ -1147,19 +1211,47 @@ onUnmounted(() => {
     </div>
 
     <div class="flex-1 overflow-y-auto">
-      <div class="flex items-center gap-1 mb-2 text-[11px]">
-        <button
-          data-testid="tab-today"
-          @click="view = 'today'"
-          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
-          :class="view === 'today' ? 'bg-sky-500/15 text-sky-600' : 'text-zinc-400 hover:text-zinc-600'"
-        >TODAY</button>
-        <button
-          data-testid="tab-all"
-          @click="view = 'all'"
-          class="px-2.5 py-1 rounded transition-colors cursor-pointer"
-          :class="view === 'all' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
-        >All</button>
+      <div class="flex items-center justify-between mb-2 text-[11px]">
+        <div class="flex items-center gap-1">
+          <button
+            data-testid="tab-today"
+            @click="view = 'today'"
+            class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+            :class="view === 'today' ? 'bg-sky-500/15 text-sky-600' : 'text-zinc-400 hover:text-zinc-600'"
+          >TODAY</button>
+          <button
+            data-testid="tab-all"
+            @click="view = 'all'"
+            class="px-2.5 py-1 rounded transition-colors cursor-pointer"
+            :class="view === 'all' ? 'bg-zinc-200 text-zinc-700' : 'text-zinc-400 hover:text-zinc-600'"
+          >All</button>
+        </div>
+        <div class="flex items-center gap-1.5" data-testid="paging">
+          <span class="text-zinc-400">Page</span>
+          <button
+            data-testid="page-prev"
+            @click="page = Math.max(1, page - 1)"
+            :disabled="page <= 1"
+            class="px-1.5 py-0.5 rounded border border-zinc-200 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            :class="page > 1 ? 'text-zinc-600 hover:border-zinc-400' : 'text-zinc-300'"
+          >‹</button>
+          <span class="text-zinc-500 tabular-nums">{{ page }} / {{ totalPages }}</span>
+          <button
+            data-testid="page-next"
+            @click="page = Math.min(totalPages, page + 1)"
+            :disabled="page >= totalPages"
+            class="px-1.5 py-0.5 rounded border border-zinc-200 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+            :class="page < totalPages ? 'text-zinc-600 hover:border-zinc-400' : 'text-zinc-300'"
+          >›</button>
+          <select
+            data-testid="page-size"
+            :value="pageSize"
+            @change="setPageSize(Number($event.target.value))"
+            class="bg-white border border-zinc-200 rounded px-1 py-0.5 text-zinc-600 cursor-pointer outline-none"
+          >
+            <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </div>
       </div>
       <TransitionGroup name="list" tag="div" class="space-y-0.5">
         <template v-for="item in renderList" :key="item.type === 'divider' ? 'recurring-divider' : item.task.id">

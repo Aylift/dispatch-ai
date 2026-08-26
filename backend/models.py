@@ -22,3 +22,9 @@ class Task(Base):
     due_date = Column(Date, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    page_size = Column(Integer, default=10, nullable=False)  # number of tasks per page

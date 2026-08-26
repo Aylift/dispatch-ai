@@ -9,7 +9,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import init_db, get_db, run_migrations
-from models import Task
+from models import Task, Setting
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskParseIn
 from agent import transcribe_audio, parse_tasks
 from stream_agent import stream_transcribe, _ts
@@ -276,3 +276,25 @@ async def delete_task(task_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(task)
     await db.commit()
 
+
+@app.get("/settings", response_model=dict)
+async def get_settings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Setting).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        return {"page_size": 10}
+    return {"page_size": settings.page_size}
+
+
+@app.patch("/settings", response_model=dict)
+async def update_settings(settings_update: dict, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Setting).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        settings = Setting()
+        db.add(settings)
+    if "page_size" in settings_update:
+        settings.page_size = settings_update["page_size"]
+    await db.commit()
+    await db.refresh(settings)
+    return {"page_size": settings.page_size}
