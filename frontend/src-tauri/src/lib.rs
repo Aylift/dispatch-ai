@@ -292,13 +292,23 @@ pub fn run() {
       }
 
       // Launch with the OS at logon: register the autostart Run/Startup key
-      // pointing at this executable. Idempotent.
-      if let Err(e) = tauri_plugin_autostart::ManagerExt::autolaunch(app).enable() {
-        log::warn!("failed to enable autostart: {e}");
+      // pointing at this executable. Idempotent. Only in release builds — a
+      // debug build loads its UI from the vite dev server (:5173), which isn't
+      // running at logon, so autostarting it would spawn a blank window that
+      // holds the single-instance lock and blocks later manual launches.
+      if !cfg!(debug_assertions) {
+        if let Err(e) = tauri_plugin_autostart::ManagerExt::autolaunch(app).enable() {
+          log::warn!("failed to enable autostart: {e}");
+        }
       }
 
       // Dock the HUD to the right edge of the monitor, full height.
       dock_to_right(app.handle());
+
+      // Kill any orphaned backend still holding :8000 from a prior launch so
+      // the fresh spawn can bind. (stop() only runs on a clean exit.)
+      #[cfg(windows)]
+      kill_port_8000();
 
       // Spawn the backend so the HUD has a running API.
       let backend = BackendProcess::start();
