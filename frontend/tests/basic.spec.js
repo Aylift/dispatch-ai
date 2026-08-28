@@ -31,6 +31,19 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=ai-powered task hud')).toBeVisible()
   })
 
+  // Regression: the app shell must mount and render even if the backend is
+  // unreachable. A <script setup> TDZ error (a computed referencing another
+  // computed before it is initialized) previously made Vue swallow the error and
+  // render an empty #app — the header never appeared. The header renders
+  // regardless of appStatus, so this guards the mount path itself.
+  test('app shell renders header even when backend is down', async ({ page }) => {
+    await page.route('**/health', (route) => route.abort())
+    await page.goto(FRONTEND_URL)
+    await expect(page.locator('h1')).toContainText('DISPATCH')
+    await expect(page.locator('text=ai-powered task hud')).toBeVisible()
+    await expect(page.locator('[data-testid="task-input"]')).toBeVisible()
+  })
+
   test('can type in textarea and add task', async ({ page }) => {
     const textarea = page.locator('[data-testid="task-input"]')
     await textarea.fill('buy milk')

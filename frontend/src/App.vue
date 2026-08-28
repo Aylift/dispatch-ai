@@ -89,6 +89,23 @@ const hasTag = (task, tag) => Array.isArray(task.tags) && task.tags.includes(tag
 // vanishing to the All list mid-countdown.
 const hasPendingUndo = (taskId) => undo.value && undo.value.taskId === taskId
 
+// Sort tasks: undone first, then by the current sort mode.
+// 'priority': 1=highest first, then newest. 'created': newest first.
+const sortedTasks = computed(() => {
+  if (sortMode.value === 'created') {
+    return [...tasks.value].sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1
+      if (a.created_at !== b.created_at) return new Date(b.created_at) - new Date(a.created_at)
+      return b.id - a.id
+    })
+  }
+  return [...tasks.value].sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1
+    if (a.priority !== b.priority) return a.priority - b.priority
+    return b.id - a.id
+  })
+})
+
 // Tasks shown in the active tab. 'today' filters to tasks tagged TODAY, plus
 // any task still inside its undo window so the revert button stays visible.
 const visibleTasks = computed(() => {
@@ -152,21 +169,6 @@ async function loadSettings() {
 // to the last valid page instead of showing an empty list.
 watch(totalPages, (n) => {
   if (page.value > n) page.value = n
-})
-
-const sortedTasks = computed(() => {
-  if (sortMode.value === 'created') {
-    return [...tasks.value].sort((a, b) => {
-      if (a.done !== b.done) return a.done ? 1 : -1
-      if (a.created_at !== b.created_at) return new Date(b.created_at) - new Date(a.created_at)
-      return b.id - a.id
-    })
-  }
-  return [...tasks.value].sort((a, b) => {
-    if (a.done !== b.done) return a.done ? 1 : -1
-    if (a.priority !== b.priority) return a.priority - b.priority
-    return b.id - a.id
-  })
 })
 
 function toggleTheme() {

@@ -105,3 +105,23 @@ cmd /c "set RUN_LOCAL_E2E=1&& set E2E_BACKEND_URL=http://127.0.0.1:8100&& set E2
   the frontend releases the mic.
 - Timestamped logs are tagged `[ws]`, `[stream]`, `[dg]`, `[emit]`, `[flush]`,
   `[voice]` for tracing the pipeline.
+
+## Frontend mount gotcha — computed TDZ (blank HUD)
+
+A `<script setup>` **temporal-dead-zone (TDZ)** error can make the whole HUD
+render as a blank dark rectangle with **no** JS error visible:
+
+- Symptom: the Tauri window paints only the `#app` CSS background
+  (`zinc-900`), no header/buttons/tasks. Pixel analysis shows 0 content pixels.
+- Cause: a `computed()` referencing another `computed()` (or `ref`) that is
+  declared **later** in the same `<script setup>`. During initial render the
+  getter runs while the dependency is still uninitialized →
+  `ReferenceError: Cannot access 'X' before initialization`.
+- Why it's silent: Vue catches setup/render errors internally and renders an
+  empty `#app`. `window.onerror` / `unhandledrejection` in `index.html` do **not**
+  fire. To surface it, set `app.config.errorHandler` in `main.js` and render the
+  error to the DOM.
+- Fix: declare dependencies **before** dependents. In `App.vue`, `sortedTasks`
+  must precede `visibleTasks` (and everything that derives from it).
+- Guard: `frontend/tests/basic.spec.js` "app shell renders header even when
+  backend is down" asserts the header mounts regardless of backend state.

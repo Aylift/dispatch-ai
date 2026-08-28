@@ -249,16 +249,35 @@ fn dock_to_right(app: &tauri::AppHandle) {
   let Some(win) = app.get_webview_window("main") else {
     return;
   };
-  let Some(monitor) = win.current_monitor().ok().flatten() else {
+  // Dock to the PRIMARY monitor. Using current_monitor() here is a bug: if the
+  // window is ever placed on a secondary monitor with negative coordinates
+  // (e.g. a display arranged above the primary), it docks to that off-screen
+  // work area and the HUD becomes invisible while the OS still reports it as
+  // "visible". The primary monitor is always on-screen.
+  let Some(monitor) = win.primary_monitor().ok().flatten() else {
     return;
   };
   let work = monitor.work_area();
-  let width = 640.0;
-  let height = work.size.height as f64;
-  let x = work.position.x as f64 + work.size.width as f64 - width;
-  let y = work.position.y as f64;
-  let _ = win.set_size(tauri::PhysicalSize::new(width, height));
-  let _ = win.set_position(tauri::PhysicalPosition::new(x, y));
+  // work_area() is in PHYSICAL pixels. The desired 640 is a LOGICAL width, so
+  // scale it by the monitor's DPI factor — otherwise on a high-DPI display the
+  // window is squashed to 640 physical px (e.g. 320 logical at 200%).
+  let scale = monitor.scale_factor();
+  let width = (640.0 * scale).round() as u32;
+  let height = work.size.height;
+  let x = work.position.x + work.size.width as i32 - width as i32;
+  let y = work.position.y;
+  log::info!(
+    "dock: monitor={:?} scale={} work={:?}, target=({}, {}, {}x{})",
+    monitor.name(),
+    monitor.scale_factor(),
+    work,
+    x,
+    y,
+    width,
+    height
+  );
+  win.set_size(tauri::PhysicalSize::new(width, height)).unwrap();
+  win.set_position(tauri::PhysicalPosition::new(x, y)).unwrap();
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -302,7 +321,9 @@ pub fn run() {
         }
       }
 
-      // Dock the HUD to the right edge of the monitor, full height.
+      // Dock the HUD to the right edge of the primary monitor, full height.
+      // The window is created hidden (visible:false) so this resize/move happens
+      // before WebView2 paints; the frontend calls .show() once Vue has mounted.
       dock_to_right(app.handle());
 
       // Kill any orphaned backend still holding :8000 from a prior launch so
