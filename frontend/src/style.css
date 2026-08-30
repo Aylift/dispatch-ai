@@ -36,3 +36,14 @@ body,
   transform: translateX(16px);
 }
 
+/* Global undo toast slide/fade. */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.2s ease;
+}
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+

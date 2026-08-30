@@ -107,5 +107,12 @@ defineProps({
       <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>
       <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>
     </template>
+
+    <!-- More / overflow menu (three dots) -->
+    <template v-else-if="name === 'more'">
+      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+    </template>
   </svg>
 </template>

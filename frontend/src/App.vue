@@ -28,40 +28,57 @@ const editingText = ref('')      // draft text while editing
 let descInputEl = null
 let editInputEl = null
 
-// Transient undo state for the Today / Recur toggles. When one is clicked the
-// change applies optimistically and the button turns into a countdown with a
-// reverse arrow; if the user doesn't cancel within the window it commits to the
-// backend. This stops a mis-click from yanking a task out of the current tab.
-const undo = ref(null) // { taskId, action, remaining, timer, revert, commit }
+// Global toast undo. An undoable action applies optimistically and shows a
+// bottom toast with an explicit Undo button. If the user doesn't click Undo
+// within the window, commit() runs; clicking Undo calls revert() and clears
+// the toast. A new undoable action replaces the previous toast.
+const undo = ref(null) // { taskId, action, message, timer, revert, commit }
+const UNDO_MS = 5000
 
 function cancelUndo() {
   if (undo.value) {
-    clearInterval(undo.value.timer)
+    clearTimeout(undo.value.timer)
     undo.value = null
   }
 }
 
-function startUndo(taskId, action, revert, commit, seconds = 3) {
+function startUndo(taskId, action, message, revert, commit) {
   cancelUndo()
-  const timer = setInterval(() => {
+  const timer = setTimeout(() => {
     const u = undo.value
     if (!u) return
-    u.remaining -= 1
-    if (u.remaining <= 0) {
-      clearInterval(u.timer)
-      undo.value = null
-      u.commit()
-    }
-  }, 1000)
-  undo.value = { taskId, action, remaining: seconds, timer, revert, commit }
+    undo.value = null
+    u.commit()
+  }, UNDO_MS)
+  undo.value = { taskId, action, message, timer, revert, commit }
 }
 
 function undoNow() {
   if (undo.value) {
-    clearInterval(undo.value.timer)
+    clearTimeout(undo.value.timer)
     undo.value.revert()
     undo.value = null
   }
+}
+
+// ---- Task overflow menu ---------------------------------------------------
+// The "..." menu on each row holds the secondary actions (Today, Recur, Reset,
+// Delete). Only one menu is open at a time; it closes on outside click, Escape,
+// or after selecting an action. It must not trigger row expansion.
+const menuOpenId = ref(null)
+
+function toggleMenu(taskId) {
+  menuOpenId.value = menuOpenId.value === taskId ? null : taskId
+}
+
+function closeMenu() {
+  menuOpenId.value = null
+}
+
+// Close the open menu when clicking anywhere outside it. The menu button and
+// the menu itself stop propagation so their own clicks don't close it.
+function onDocClick() {
+  closeMenu()
 }
 
 // Backend/DB connection state: 'loading' = connecting/retrying, 'ready' = up,
@@ -464,6 +481,7 @@ function toggleToday(task) {
   task.tags = newTags
   startUndo(
     task.id, 'today',
+    had ? 'Removed from Today' : 'Added to Today',
     () => { task.tags = prevTags },
     async () => {
       try {
@@ -473,8 +491,7 @@ function toggleToday(task) {
         console.error(err)
         task.tags = prevTags
       }
-    },
-    3
+    }
   )
 }
 
@@ -491,6 +508,7 @@ function toggleRecurring(task) {
   task.tags = newTags
   startUndo(
     task.id, 'recurring',
+    recurring ? 'Made recurring' : 'Removed recurring',
     () => { task.recurring = prevRecurring; task.tags = prevTags },
     async () => {
       try {
@@ -502,30 +520,30 @@ function toggleRecurring(task) {
         task.recurring = prevRecurring
         task.tags = prevTags
       }
-    },
-    3
+    }
   )
 }
 
-// Delete a task. Same 3s undo window: the row turns into a "↩ Ns" button and
-// only actually deletes if the user doesn't cancel. The task stays in the list
-// during the countdown so the undo button remains visible; it's removed on
-// commit. Reverting is a no-op (nothing was removed yet).
+// Delete a task. Deletes immediately (no confirmation) and shows an Undo toast
+// for the toast window. Undo re-inserts the task at its previous position;
+// otherwise the backend delete is committed.
 function removeTask(task) {
+  const index = tasks.value.findIndex(t => t.id === task.id)
+  if (index !== -1) tasks.value.splice(index, 1)
   startUndo(
     task.id, 'delete',
-    () => {},
+    'Task deleted',
+    () => {
+      if (index !== -1) tasks.value.splice(index, 0, task)
+    },
     async () => {
-      const index = tasks.value.findIndex(t => t.id === task.id)
-      if (index !== -1) tasks.value.splice(index, 1)
       try {
         await deleteTask(task.id)
       } catch (err) {
         console.error(err)
         if (index !== -1) tasks.value.splice(index, 0, task)
       }
-    },
-    3
+    }
   )
 }
 
@@ -655,17 +673,25 @@ function onTextareaKeydown(event) {
   }
 }
 
+function onDocKeydown(event) {
+  if (event.key === 'Escape') closeMenu()
+}
+
 onMounted(async () => {
   startWatchdog()
   await connect()
   await loadSettings()
   loadMics()
   startClock()
+  document.addEventListener('click', onDocClick)
+  document.addEventListener('keydown', onDocKeydown)
 })
 
 onUnmounted(() => {
   stopWatchdog()
   stopClock()
+  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('keydown', onDocKeydown)
 })
 </script>
 <template>
@@ -899,13 +925,6 @@ onUnmounted(() => {
                 @update:modelValue="changePriority(item.task, $event)"
               />
               <button
-                v-if="undo && undo.taskId === item.task.id && undo.action === 'today'"
-                data-testid="undo-today"
-                @click.stop="undoNow()"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
-                title="Undo — click to cancel"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
-              <button
                 data-testid="task-focus"
                 @click.stop="toggleFocus(item.task)"
                 class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -919,68 +938,57 @@ onUnmounted(() => {
                 <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
                 <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
               </button>
-              <span
-                v-if="timeboxLabel(item.task)"
-                data-testid="task-timebox-label"
-                class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-medium"
-                :class="item.task.status === 'active'
-                  ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                  : 'bg-amber-500/10 text-amber-300 border-amber-500/30'"
-                :title="`${Math.floor(effectiveElapsed(item.task) / 60)} min elapsed of ${item.task.timebox_minutes} min`"
-              >{{ timeboxLabel(item.task) }}</span>
-              <button
-                v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
-                data-testid="task-reset"
-                @click.stop="resetTimer(item.task)"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer text-zinc-500 border-zinc-700/50 hover:text-red-400 hover:border-red-500/40"
-                title="Reset timer"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /></button>
-              <button
-                data-testid="toggle-today"
-                @click.stop="toggleToday(item.task)"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-                :class="hasTag(item.task, TODAY_TAG)
-                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
-                  : 'text-zinc-500 border-zinc-700/50 hover:text-sky-300 hover:border-sky-500/40'"
-                :title="hasTag(item.task, TODAY_TAG) ? 'Remove from today' : 'Add to today'"
-              >Today</button>
-              <button
-                v-if="undo && undo.taskId === item.task.id && undo.action === 'recurring'"
-                data-testid="undo-recurring"
-                @click.stop="undoNow()"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
-                title="Undo — click to cancel"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
-              <button
-                v-else
-                data-testid="toggle-recurring"
-                @click.stop="toggleRecurring(item.task)"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-                :class="item.task.recurring
-                  ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
-                  : 'text-zinc-500 border-zinc-700/50 hover:text-violet-300 hover:border-violet-500/40'"
-                :title="item.task.recurring ? 'Remove recurring' : 'Make recurring (resets daily)'"
-              ><AppIcon v-if="item.task.recurring" name="repeat" class="w-3 h-3 inline-block -mt-0.5" /><template v-else>Recur</template></button>
               <button
                 data-testid="task-expand"
                 @click.stop="toggleExpand(item.task)"
                 class="text-zinc-500 hover:text-sky-300 transition-colors shrink-0 cursor-pointer px-0.5"
                 :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
               ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5" /></button>
-              <button
-                v-if="undo && undo.taskId === item.task.id && undo.action === 'delete'"
-                data-testid="undo-delete"
-                @click.stop="undoNow()"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40"
-                title="Undo — click to cancel"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
-              <button
-                v-else
-                data-testid="task-delete"
-                @click.stop="removeTask(item.task)"
-                class="text-zinc-500 hover:text-red-400 transition-colors shrink-0 cursor-pointer px-0.5"
-                title="Delete task"
-              ><AppIcon name="trash" class="w-3.5 h-3.5" /></button>
+              <div class="relative shrink-0" @click.stop>
+                <button
+                  data-testid="task-menu"
+                  @click.stop="toggleMenu(item.task.id)"
+                  class="text-zinc-500 hover:text-zinc-200 transition-colors cursor-pointer px-0.5"
+                  :title="'More actions'"
+                  :aria-expanded="menuOpenId === item.task.id"
+                  aria-haspopup="true"
+                ><AppIcon name="more" class="w-3.5 h-3.5" /></button>
+                <div
+                  v-if="menuOpenId === item.task.id"
+                  data-testid="task-menu-popup"
+                  class="absolute right-0 top-full mt-1 z-20 w-40 rounded-md border border-zinc-700/60 bg-zinc-900 shadow-lg py-1"
+                  role="menu"
+                >
+                  <button
+                    data-testid="menu-today"
+                    @click.stop="toggleToday(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-zinc-800 transition-colors cursor-pointer flex items-center gap-2"
+                    :class="hasTag(item.task, TODAY_TAG) ? 'text-sky-300' : 'text-zinc-300'"
+                  >{{ hasTag(item.task, TODAY_TAG) ? 'Remove from Today' : 'Add to Today' }}</button>
+                  <button
+                    data-testid="menu-recurring"
+                    @click.stop="toggleRecurring(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-zinc-800 transition-colors cursor-pointer flex items-center gap-2"
+                    :class="item.task.recurring ? 'text-violet-300' : 'text-zinc-300'"
+                  >{{ item.task.recurring ? 'Remove recurring' : 'Make recurring' }}</button>
+                  <button
+                    v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
+                    data-testid="menu-reset"
+                    @click.stop="resetTimer(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-zinc-800 transition-colors cursor-pointer text-zinc-300"
+                  >Reset timer</button>
+                  <div class="my-1 h-px bg-zinc-700/50"></div>
+                  <button
+                    data-testid="menu-delete"
+                    @click.stop="removeTask(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-red-500/10 transition-colors cursor-pointer text-red-400"
+                  >Delete</button>
+                </div>
+              </div>
             </div>
           </div>
           <div
@@ -1077,6 +1085,24 @@ onUnmounted(() => {
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span class="text-zinc-700">Ctrl+Enter to submit</span>
     </footer>
+
+    <!-- Global undo toast -->
+    <div class="fixed bottom-4 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <Transition name="toast">
+        <div
+          v-if="undo"
+          data-testid="undo-toast"
+          class="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-lg border border-zinc-700/60 bg-zinc-800/95 shadow-xl"
+        >
+          <span class="text-xs text-zinc-200">{{ undo.message }}</span>
+          <button
+            data-testid="undo-toast-btn"
+            @click="undoNow"
+            class="text-xs font-medium text-sky-300 hover:text-sky-200 transition-colors cursor-pointer"
+          >Undo</button>
+        </div>
+      </Transition>
+    </div>
   </div>
 
   <!-- Light theme -->
@@ -1309,13 +1335,6 @@ onUnmounted(() => {
                 @update:modelValue="changePriority(item.task, $event)"
               />
               <button
-                v-if="undo && undo.taskId === item.task.id && undo.action === 'today'"
-                data-testid="undo-today"
-                @click.stop="undoNow()"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
-                title="Undo — click to cancel"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
-              <button
                 data-testid="task-focus"
                 @click.stop="toggleFocus(item.task)"
                 class="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
@@ -1329,68 +1348,57 @@ onUnmounted(() => {
                 <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
                 <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
               </button>
-              <span
-                v-if="timeboxLabel(item.task)"
-                data-testid="task-timebox-label"
-                class="text-[10px] px-1.5 py-0.5 rounded border shrink-0 font-medium"
-                :class="item.task.status === 'active'
-                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                  : 'bg-amber-500/10 text-amber-600 border-amber-500/30'"
-                :title="`${Math.floor(effectiveElapsed(item.task) / 60)} min elapsed of ${item.task.timebox_minutes} min`"
-              >{{ timeboxLabel(item.task) }}</span>
-              <button
-                v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
-                data-testid="task-reset"
-                @click.stop="resetTimer(item.task)"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer text-zinc-400 border-zinc-200 hover:text-red-600 hover:border-red-400/50"
-                title="Reset timer"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /></button>
-              <button
-                data-testid="toggle-today"
-                @click.stop="toggleToday(item.task)"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-                :class="hasTag(item.task, TODAY_TAG)
-                  ? 'bg-sky-500/15 text-sky-600 border-sky-500/40'
-                  : 'text-zinc-400 border-zinc-200 hover:text-sky-600 hover:border-sky-400/50'"
-                :title="hasTag(item.task, TODAY_TAG) ? 'Remove from today' : 'Add to today'"
-              >Today</button>
-              <button
-                v-if="undo && undo.taskId === item.task.id && undo.action === 'recurring'"
-                data-testid="undo-recurring"
-                @click.stop="undoNow()"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
-                title="Undo — click to cancel"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
-              <button
-                v-else
-                data-testid="toggle-recurring"
-                @click.stop="toggleRecurring(item.task)"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer"
-                :class="item.task.recurring
-                  ? 'bg-violet-500/15 text-violet-600 border-violet-500/40'
-                  : 'text-zinc-400 border-zinc-200 hover:text-violet-600 hover:border-violet-400/50'"
-                :title="item.task.recurring ? 'Remove recurring' : 'Make recurring (resets daily)'"
-              ><AppIcon v-if="item.task.recurring" name="repeat" class="w-3 h-3 inline-block -mt-0.5" /><template v-else>Recur</template></button>
               <button
                 data-testid="task-expand"
                 @click.stop="toggleExpand(item.task)"
                 class="text-zinc-400 hover:text-sky-600 transition-colors shrink-0 cursor-pointer px-0.5"
                 :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
               ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5" /></button>
-              <button
-                v-if="undo && undo.taskId === item.task.id && undo.action === 'delete'"
-                data-testid="undo-delete"
-                @click.stop="undoNow()"
-                class="text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 cursor-pointer bg-amber-500/20 text-amber-600 border-amber-500/40"
-                title="Undo — click to cancel"
-              ><AppIcon name="undo" class="w-3 h-3 inline-block -mt-0.5" /> {{ undo.remaining }}s</button>
-              <button
-                v-else
-                data-testid="task-delete"
-                @click.stop="removeTask(item.task)"
-                class="text-zinc-400 hover:text-red-600 transition-colors shrink-0 cursor-pointer px-0.5"
-                title="Delete task"
-              ><AppIcon name="trash" class="w-3.5 h-3.5" /></button>
+              <div class="relative shrink-0" @click.stop>
+                <button
+                  data-testid="task-menu"
+                  @click.stop="toggleMenu(item.task.id)"
+                  class="text-zinc-400 hover:text-zinc-700 transition-colors cursor-pointer px-0.5"
+                  :title="'More actions'"
+                  :aria-expanded="menuOpenId === item.task.id"
+                  aria-haspopup="true"
+                ><AppIcon name="more" class="w-3.5 h-3.5" /></button>
+                <div
+                  v-if="menuOpenId === item.task.id"
+                  data-testid="task-menu-popup"
+                  class="absolute right-0 top-full mt-1 z-20 w-40 rounded-md border border-zinc-200 bg-white shadow-lg py-1"
+                  role="menu"
+                >
+                  <button
+                    data-testid="menu-today"
+                    @click.stop="toggleToday(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-zinc-100 transition-colors cursor-pointer flex items-center gap-2"
+                    :class="hasTag(item.task, TODAY_TAG) ? 'text-sky-600' : 'text-zinc-700'"
+                  >{{ hasTag(item.task, TODAY_TAG) ? 'Remove from Today' : 'Add to Today' }}</button>
+                  <button
+                    data-testid="menu-recurring"
+                    @click.stop="toggleRecurring(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-zinc-100 transition-colors cursor-pointer flex items-center gap-2"
+                    :class="item.task.recurring ? 'text-violet-600' : 'text-zinc-700'"
+                  >{{ item.task.recurring ? 'Remove recurring' : 'Make recurring' }}</button>
+                  <button
+                    v-if="item.task.status === 'active' || item.task.status === 'paused' || (item.task.elapsed_seconds || 0) > 0"
+                    data-testid="menu-reset"
+                    @click.stop="resetTimer(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-zinc-100 transition-colors cursor-pointer text-zinc-700"
+                  >Reset timer</button>
+                  <div class="my-1 h-px bg-zinc-200"></div>
+                  <button
+                    data-testid="menu-delete"
+                    @click.stop="removeTask(item.task); closeMenu()"
+                    role="menuitem"
+                    class="w-full text-left text-[11px] px-3 py-1.5 hover:bg-red-50 transition-colors cursor-pointer text-red-500"
+                  >Delete</button>
+                </div>
+              </div>
             </div>
           </div>
           <div
@@ -1487,5 +1495,23 @@ onUnmounted(() => {
       <span>{{ tasks.length }} task{{ tasks.length !== 1 ? 's' : '' }}</span>
       <span class="text-zinc-300">Ctrl+Enter to submit</span>
     </footer>
+
+    <!-- Global undo toast -->
+    <div class="fixed bottom-4 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <Transition name="toast">
+        <div
+          v-if="undo"
+          data-testid="undo-toast"
+          class="pointer-events-auto flex items-center gap-3 px-4 py-2.5 rounded-lg border border-zinc-300 bg-white/95 shadow-xl"
+        >
+          <span class="text-xs text-zinc-700">{{ undo.message }}</span>
+          <button
+            data-testid="undo-toast-btn"
+            @click="undoNow"
+            class="text-xs font-medium text-sky-600 hover:text-sky-700 transition-colors cursor-pointer"
+          >Undo</button>
+        </div>
+      </Transition>
+    </div>
   </div>
 </template>

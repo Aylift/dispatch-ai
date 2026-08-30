@@ -256,12 +256,13 @@ test.describe('Dispatch AI - basic UI', () => {
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=today task')).toBeVisible()
 
-    // Tag "today task" via its toggle button. The button turns into a 3s undo
-    // countdown; wait for it to expire so the change commits and the toggle
-    // button reappears.
+    // Tag "today task" via its overflow menu. The change applies and shows an
+    // undo toast; wait for the toast to expire so the change commits.
     const todayTaskRow = page.locator('[data-testid="task-row"]', { hasText: 'today task' })
-    await todayTaskRow.locator('[data-testid="toggle-today"]').click()
-    await expect(todayTaskRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+    await todayTaskRow.locator('[data-testid="task-menu"]').click()
+    await todayTaskRow.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
 
     // Switch to TODAY tab: only the tagged task shows
     await page.locator('[data-testid="tab-today"]').click()
@@ -275,12 +276,16 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=temp today')).toBeVisible()
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'temp today' })
-    await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
 
     // Untag it (wait for the previous undo window to expire first)
-    await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
 
     // TODAY tab is now empty
     await page.locator('[data-testid="tab-today"]').click()
@@ -320,24 +325,32 @@ test.describe('Dispatch AI - basic UI', () => {
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=normal today')).toBeVisible()
     const normalRow = page.locator('[data-testid="task-row"]', { hasText: 'normal today' })
-    await normalRow.locator('[data-testid="toggle-today"]').click()
-    await expect(normalRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+    await normalRow.locator('[data-testid="task-menu"]').click()
+    await normalRow.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
 
     // A recurring task
     await page.locator('[data-testid="task-input"]').fill('daily habit')
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=daily habit')).toBeVisible()
     const recRow = page.locator('[data-testid="task-row"]', { hasText: 'daily habit' })
-    await recRow.locator('[data-testid="toggle-recurring"]').click()
-    await expect(recRow.locator('[data-testid="toggle-recurring"] svg')).toBeVisible({ timeout: 5000 })
+    await recRow.locator('[data-testid="task-menu"]').click()
+    await recRow.locator('[data-testid="menu-recurring"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
     // Recurring auto-adds the TODAY tag
-    await expect(recRow.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+    await expect(page.locator('[data-testid="tab-today"]')).toBeVisible()
 
     // TODAY tab: normal on top, divider present, recurring below
     await page.locator('[data-testid="tab-today"]').click()
     await expect(page.locator('text=daily habit')).toBeVisible()
     await expect(page.locator('text=normal today')).toBeVisible()
     await expect(page.locator('text=Recurring')).toBeVisible()
+
+    // Wait for the list reorder transition (0.32s) to settle before measuring
+    // positions, otherwise the recurring task is caught mid-glide.
+    await page.waitForTimeout(400)
 
     // Recurring task appears after the normal one in the DOM
     const recPos = await page.locator('[data-testid="task-row"]', { hasText: 'daily habit' }).evaluate(el => el.getBoundingClientRect().top)
@@ -352,15 +365,14 @@ test.describe('Dispatch AI - basic UI', () => {
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'undo me' })
 
-    // Click Today: the button becomes a 3s undo countdown with a reverse arrow
-    await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="undo-today"]')).toBeVisible()
-    await expect(row.locator('[data-testid="undo-today"] svg')).toBeVisible()
+    // Click Today via the menu: an undo toast appears
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
 
     // Cancel within the window: the toggle reverts, no commit happens
-    await row.locator('[data-testid="undo-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toBeVisible()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today')
+    await page.locator('[data-testid="undo-toast-btn"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible()
 
     // The task was NOT tagged TODAY, so it must not appear in the TODAY tab
     await page.locator('[data-testid="tab-today"]').click()
@@ -374,12 +386,12 @@ test.describe('Dispatch AI - basic UI', () => {
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'undo recur' })
 
-    await row.locator('[data-testid="toggle-recurring"]').click()
-    await expect(row.locator('[data-testid="undo-recurring"]')).toBeVisible()
-    await expect(row.locator('[data-testid="undo-recurring"] svg')).toBeVisible()
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-recurring"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
 
-    await row.locator('[data-testid="undo-recurring"]').click()
-    await expect(row.locator('[data-testid="toggle-recurring"]')).toBeVisible()
+    await page.locator('[data-testid="undo-toast-btn"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible()
 
     // Recurring was cancelled, so the task must not be tagged TODAY
     await page.locator('[data-testid="tab-today"]').click()
@@ -392,23 +404,26 @@ test.describe('Dispatch AI - basic UI', () => {
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=stay in today')).toBeVisible()
     const row = page.locator('[data-testid="task-row"]', { hasText: 'stay in today' })
-    await row.locator('[data-testid="toggle-today"]').click()
-    await expect(row.locator('[data-testid="toggle-today"]')).toContainText('Today', { timeout: 5000 })
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
 
     // Go to TODAY tab: the task is there
     await page.locator('[data-testid="tab-today"]').click()
     await expect(page.locator('text=stay in today')).toBeVisible()
 
-    // Untag it: the row must STAY visible (with the undo button) during the
-    // countdown instead of vanishing to the All list.
+    // Untag it: the row must STAY visible (with the undo toast) during the
+    // window instead of vanishing to the All list.
     const todayRow = page.locator('[data-testid="task-row"]', { hasText: 'stay in today' })
-    await todayRow.locator('[data-testid="toggle-today"]').click()
-    await expect(todayRow.locator('[data-testid="undo-today"]')).toBeVisible()
+    await todayRow.locator('[data-testid="task-menu"]').click()
+    await todayRow.locator('[data-testid="menu-today"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
     await expect(page.locator('text=stay in today')).toBeVisible()
 
     // Click revert: the task keeps its TODAY tag and stays in the TODAY tab
-    await todayRow.locator('[data-testid="undo-today"]').click()
-    await expect(todayRow.locator('[data-testid="toggle-today"]')).toBeVisible()
+    await page.locator('[data-testid="undo-toast-btn"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible()
     await expect(page.locator('text=stay in today')).toBeVisible()
   })
 
@@ -418,8 +433,10 @@ test.describe('Dispatch AI - basic UI', () => {
     await page.locator('text=+ Add Task').click()
     await expect(page.locator('text=daily habit')).toBeVisible()
     const recRow = page.locator('[data-testid="task-row"]', { hasText: 'daily habit' })
-    await recRow.locator('[data-testid="toggle-recurring"]').click()
-    await expect(recRow.locator('[data-testid="toggle-recurring"] svg')).toBeVisible({ timeout: 5000 })
+    await recRow.locator('[data-testid="task-menu"]').click()
+    await recRow.locator('[data-testid="menu-recurring"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible({ timeout: 7000 })
 
     // A normal task to clear
     await page.locator('[data-testid="task-input"]').fill('one off')
@@ -445,15 +462,16 @@ test.describe('Dispatch AI - basic UI', () => {
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'delete me' })
 
-    // Click delete: the row turns into a 3s undo countdown and stays visible
-    await row.locator('[data-testid="task-delete"]').click()
-    await expect(row.locator('[data-testid="undo-delete"]')).toBeVisible()
-    await expect(row.locator('[data-testid="undo-delete"] svg')).toBeVisible()
-    await expect(page.locator('text=delete me')).toBeVisible()
+    // Click delete in the menu: the task is removed immediately and an undo
+    // toast appears
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-delete"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
+    await expect(page.locator('text=delete me')).not.toBeVisible()
 
-    // Cancel: the task is restored and stays
-    await row.locator('[data-testid="undo-delete"]').click()
-    await expect(row.locator('[data-testid="task-delete"]')).toBeVisible()
+    // Undo: the task is restored and stays
+    await page.locator('[data-testid="undo-toast-btn"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).not.toBeVisible()
     await expect(page.locator('text=delete me')).toBeVisible()
   })
 
@@ -463,11 +481,12 @@ test.describe('Dispatch AI - basic UI', () => {
     await expect(page.locator('text=really delete')).toBeVisible()
 
     const row = page.locator('[data-testid="task-row"]', { hasText: 'really delete' })
-    await row.locator('[data-testid="task-delete"]').click()
-    await expect(row.locator('[data-testid="undo-delete"]')).toBeVisible()
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-delete"]').click()
+    await expect(page.locator('[data-testid="undo-toast"]')).toBeVisible()
 
-    // Wait for the 3s undo window to expire; the task is then deleted
-    await expect(page.locator('text=really delete')).not.toBeVisible({ timeout: 5000 })
+    // Wait for the 5s undo window to expire; the task is then deleted
+    await expect(page.locator('text=really delete')).not.toBeVisible({ timeout: 7000 })
   })
 
   test('starting a task shows a live timer and adds it to TODAY', async ({ page }) => {
@@ -529,14 +548,10 @@ test.describe('Dispatch AI - basic UI', () => {
     await row.locator('[data-testid="task-focus"]').click()
     await expect(detail.locator('[data-testid="task-progress"]')).toBeVisible({ timeout: 5000 })
 
-    // The row shows a compact "elapsed/total min" label without opening the dropdown
-    await expect(row.locator('[data-testid="task-timebox-label"]')).toHaveText('0/35m')
-
-    // Typing 0 clears the timebox and removes the progress bar + row label
+    // Typing 0 clears the timebox and removes the progress bar
     await timebox.fill('0')
     await timebox.blur()
     await expect(detail.locator('[data-testid="task-progress"]')).not.toBeVisible()
-    await expect(row.locator('[data-testid="task-timebox-label"]')).not.toBeVisible()
   })
 
   test('reset timer zeroes elapsed time and stops the task', async ({ page }) => {
@@ -549,9 +564,10 @@ test.describe('Dispatch AI - basic UI', () => {
     await row.locator('[data-testid="task-focus"]').click()
     await expect(row.locator('[data-testid="task-focus"]')).toContainText(/[0-9]s/, { timeout: 5000 })
 
-    // Reset the timer
-    await row.locator('[data-testid="task-reset"]').click()
-    await expect(row.locator('[data-testid="task-reset"]')).not.toBeVisible()
+    // Reset the timer via the overflow menu
+    await row.locator('[data-testid="task-menu"]').click()
+    await row.locator('[data-testid="menu-reset"]').click()
+    await expect(row.locator('[data-testid="menu-reset"]')).not.toBeVisible()
     // The focus button returns to the idle "play" state (no elapsed shown)
     await expect(row.locator('[data-testid="task-focus"]')).not.toContainText(/[0-9]s/)
   })
