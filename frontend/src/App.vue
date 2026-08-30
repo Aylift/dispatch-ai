@@ -559,7 +559,10 @@ function toggleExpand(task) {
   expandedId.value = task.id
   descDraft.value = task.description || ''
   requestAnimationFrame(() => {
-    if (descInputEl) descInputEl.focus()
+    if (descInputEl) {
+      descInputEl.focus()
+      autoGrowDesc()
+    }
   })
 }
 
@@ -574,6 +577,20 @@ async function saveDescription(task) {
     connectionError.value = 'Could not update task — backend unreachable.'
     appStatus.value = 'error'
   }
+}
+
+// Auto-grow the description textarea: starts at ~3 lines, grows to ~10 lines,
+// then scrolls. No external dependency.
+const DESC_MIN_LINES = 3
+const DESC_MAX_LINES = 10
+function autoGrowDesc() {
+  const el = descInputEl
+  if (!el) return
+  el.style.height = 'auto'
+  const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 16
+  const maxHeight = lineHeight * DESC_MAX_LINES
+  el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px'
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
 }
 
 // ---- Task title editing (single-click, in place) ------------------------
@@ -996,38 +1013,39 @@ onUnmounted(() => {
             data-testid="task-detail"
             class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-zinc-900/60 border border-zinc-700/40"
           >
-            <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
-              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
-              <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
-            </div>
-            <div class="flex items-center gap-2 mb-2 text-[10px] text-zinc-500">
-              <label class="shrink-0">Timebox</label>
-              <div class="flex items-center rounded-md border border-zinc-700/60 overflow-hidden" data-testid="task-timebox">
-                <button
-                  data-testid="timebox-minus"
-                  @click.stop="adjustTimebox(item.task, -5)"
-                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-                  title="Decrease by 5 min"
-                >−</button>
-                <input
-                  type="text"
-                  inputmode="numeric"
-                  :value="item.task.timebox_minutes ?? ''"
-                  data-testid="task-timebox-input"
-                  @change="saveTimebox(item.task, $event.target.value)"
-                  @keydown.enter="$event.target.blur()"
-                  placeholder="–"
-                  class="w-12 px-1 py-0.5 text-center text-xs text-zinc-200 placeholder-zinc-600 tabular-nums bg-transparent focus:outline-none appearance-none"
-                />
-                <button
-                  data-testid="timebox-plus"
-                  @click.stop="adjustTimebox(item.task, 5)"
-                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
-                  title="Increase by 5 min"
-                >+</button>
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2 text-[10px] text-zinc-500">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
+                <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
               </div>
-              <span class="shrink-0">min</span>
-              <span v-if="item.task.status === 'active' || item.task.status === 'paused'" class="shrink-0 text-zinc-400">{{ formatDuration(effectiveElapsed(item.task)) }} elapsed</span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <div class="flex items-center rounded-md border border-zinc-700/60 overflow-hidden" data-testid="task-timebox">
+                  <button
+                    data-testid="timebox-minus"
+                    @click.stop="adjustTimebox(item.task, -5)"
+                    class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+                    title="Decrease by 5 min"
+                  >−</button>
+                  <input
+                    type="text"
+                    inputmode="numeric"
+                    :value="item.task.timebox_minutes ?? ''"
+                    data-testid="task-timebox-input"
+                    @change="saveTimebox(item.task, $event.target.value)"
+                    @keydown.enter="$event.target.blur()"
+                    placeholder="–"
+                    class="w-12 px-1 py-0.5 text-center text-xs text-zinc-200 placeholder-zinc-600 tabular-nums bg-transparent focus:outline-none appearance-none"
+                  />
+                  <button
+                    data-testid="timebox-plus"
+                    @click.stop="adjustTimebox(item.task, 5)"
+                    class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors cursor-pointer"
+                    title="Increase by 5 min"
+                  >+</button>
+                </div>
+                <span class="shrink-0">min</span>
+                <span v-if="item.task.status === 'active' || item.task.status === 'paused'" class="shrink-0 text-zinc-400">{{ formatDuration(effectiveElapsed(item.task)) }} elapsed</span>
+              </div>
             </div>
             <div
               v-if="item.task.timebox_minutes"
@@ -1045,8 +1063,9 @@ onUnmounted(() => {
               v-model="descDraft"
               data-testid="task-description-input"
               @blur="saveDescription(item.task)"
+              @input="autoGrowDesc"
               placeholder="Add a description..."
-              class="w-full bg-zinc-900 border border-zinc-700/60 rounded p-2 text-xs text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-sky-500/50"
+              class="w-full bg-zinc-900 border border-zinc-700/60 rounded p-2 text-xs text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-sky-500/50 overflow-y-hidden"
               rows="3"
             ></textarea>
           </div>
@@ -1406,38 +1425,39 @@ onUnmounted(() => {
             data-testid="task-detail"
             class="ml-9 mr-3 mb-1 px-3 py-2 rounded-md bg-white border border-zinc-200"
           >
-            <div class="flex items-center gap-2 mb-1.5 text-[10px] text-zinc-500">
-              <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
-              <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
-            </div>
-            <div class="flex items-center gap-2 mb-2 text-[10px] text-zinc-500">
-              <label class="shrink-0">Timebox</label>
-              <div class="flex items-center rounded-md border border-zinc-200 overflow-hidden" data-testid="task-timebox">
-                <button
-                  data-testid="timebox-minus"
-                  @click.stop="adjustTimebox(item.task, -5)"
-                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
-                  title="Decrease by 5 min"
-                >−</button>
-                <input
-                  type="text"
-                  inputmode="numeric"
-                  :value="item.task.timebox_minutes ?? ''"
-                  data-testid="task-timebox-input"
-                  @change="saveTimebox(item.task, $event.target.value)"
-                  @keydown.enter="$event.target.blur()"
-                  placeholder="–"
-                  class="w-12 px-1 py-0.5 text-center text-xs text-zinc-700 placeholder-zinc-400 tabular-nums bg-transparent focus:outline-none appearance-none"
-                />
-                <button
-                  data-testid="timebox-plus"
-                  @click.stop="adjustTimebox(item.task, 5)"
-                  class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
-                  title="Increase by 5 min"
-                >+</button>
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-2 text-[10px] text-zinc-500">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span v-for="tag in (item.task.tags || [])" :key="tag" class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 border border-sky-500/30">{{ tag === TODAY_TAG ? 'Today' : tag }}</span>
+                <span v-if="!(item.task.tags || []).length" class="italic">no tags</span>
               </div>
-              <span class="shrink-0">min</span>
-              <span v-if="item.task.status === 'active' || item.task.status === 'paused'" class="shrink-0 text-zinc-400">{{ formatDuration(effectiveElapsed(item.task)) }} elapsed</span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <div class="flex items-center rounded-md border border-zinc-200 overflow-hidden" data-testid="task-timebox">
+                  <button
+                    data-testid="timebox-minus"
+                    @click.stop="adjustTimebox(item.task, -5)"
+                    class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                    title="Decrease by 5 min"
+                  >−</button>
+                  <input
+                    type="text"
+                    inputmode="numeric"
+                    :value="item.task.timebox_minutes ?? ''"
+                    data-testid="task-timebox-input"
+                    @change="saveTimebox(item.task, $event.target.value)"
+                    @keydown.enter="$event.target.blur()"
+                    placeholder="–"
+                    class="w-12 px-1 py-0.5 text-center text-xs text-zinc-700 placeholder-zinc-400 tabular-nums bg-transparent focus:outline-none appearance-none"
+                  />
+                  <button
+                    data-testid="timebox-plus"
+                    @click.stop="adjustTimebox(item.task, 5)"
+                    class="px-1.5 py-0.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 transition-colors cursor-pointer"
+                    title="Increase by 5 min"
+                  >+</button>
+                </div>
+                <span class="shrink-0">min</span>
+                <span v-if="item.task.status === 'active' || item.task.status === 'paused'" class="shrink-0 text-zinc-400">{{ formatDuration(effectiveElapsed(item.task)) }} elapsed</span>
+              </div>
             </div>
             <div
               v-if="item.task.timebox_minutes"
@@ -1455,8 +1475,9 @@ onUnmounted(() => {
               v-model="descDraft"
               data-testid="task-description-input"
               @blur="saveDescription(item.task)"
+              @input="autoGrowDesc"
               placeholder="Add a description..."
-              class="w-full bg-zinc-50 border border-zinc-200 rounded p-2 text-xs text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400/60"
+              class="w-full bg-zinc-50 border border-zinc-200 rounded p-2 text-xs text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400/60 overflow-y-hidden"
               rows="3"
             ></textarea>
           </div>
