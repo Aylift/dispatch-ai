@@ -10,6 +10,7 @@ class TaskCreate(BaseModel):
     recurring: Optional[bool] = False
     timebox_minutes: Optional[int] = Field(default=None, ge=1)
     due_date: Optional[date] = None
+    parent_id: Optional[int] = None
 
 
 class TaskUpdate(BaseModel):
@@ -23,6 +24,7 @@ class TaskUpdate(BaseModel):
     status: Optional[Literal["todo", "active", "paused"]] = None
     due_date: Optional[date] = None
     reset_elapsed: Optional[bool] = None
+    parent_id: Optional[int] = None
 
 
 class TaskParseIn(BaseModel):
@@ -42,6 +44,8 @@ class TaskOut(BaseModel):
     started_at: Optional[datetime] = None
     elapsed_seconds: int
     due_date: Optional[date] = None
+    parent_id: Optional[int] = None
+    subtasks: list["TaskOut"] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}

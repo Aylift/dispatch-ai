@@ -571,5 +571,38 @@ test.describe('Dispatch AI - basic UI', () => {
     // The focus button returns to the idle "play" state (no elapsed shown)
     await expect(row.locator('[data-testid="task-focus"]')).not.toContainText(/[0-9]s/)
   })
+
+  test('adds subtasks, shows parent progress, and completes both directions', async ({ page }) => {
+    // Create a parent task and expand it.
+    await page.locator('[data-testid="task-input"]').fill('parent task')
+    await page.locator('text=+ Add Task').click()
+    const parentRow = page.locator('[data-testid="task-row"]', { hasText: 'parent task' })
+    await expect(parentRow).toBeVisible()
+    await parentRow.locator('[data-testid="task-expand"]').click()
+
+    // Add two subtasks.
+    const detail = parentRow.locator('[data-testid="task-detail"]')
+    await detail.locator('[data-testid="subtask-input"]').fill('sub one')
+    await detail.locator('[data-testid="subtask-add"]').click()
+    await detail.locator('[data-testid="subtask-input"]').fill('sub two')
+    await detail.locator('[data-testid="subtask-add"]').click()
+    await expect(detail.locator('[data-testid="subtask-row"]')).toHaveCount(2)
+
+    // Parent row shows compact progress 0/2.
+    await expect(parentRow.locator('[data-testid="task-subtask-count"]')).toHaveText('0/2')
+
+    // Complete one subtask -> parent becomes indeterminate (progress 1/2).
+    await detail.locator('[data-testid="subtask-row"]').first().locator('input[type="checkbox"]').check()
+    await expect(parentRow.locator('[data-testid="task-subtask-count"]')).toHaveText('1/2')
+
+    // Complete the second subtask -> parent auto-completes (progress 2/2).
+    await detail.locator('[data-testid="subtask-row"]').nth(1).locator('input[type="checkbox"]').check()
+    await expect(parentRow.locator('[data-testid="task-subtask-count"]')).toHaveText('2/2')
+    await expect(parentRow.locator('input[type="checkbox"]')).toBeChecked()
+
+    // Un-complete a subtask -> parent becomes undone.
+    await detail.locator('[data-testid="subtask-row"]').first().locator('input[type="checkbox"]').uncheck()
+    await expect(parentRow.locator('input[type="checkbox"]')).not.toBeChecked()
+  })
 })
 

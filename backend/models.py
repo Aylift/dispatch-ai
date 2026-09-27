@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text, Date, func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text, Date, func, ForeignKey
+from sqlalchemy.orm import relationship
 from database import Base
 
 
@@ -20,7 +21,13 @@ class Task(Base):
     elapsed_seconds = Column(Integer, default=0, nullable=False)  # accumulated active time
     # Calendar future-proofing: scheduled date for the task (calendar widget later)
     due_date = Column(Date, nullable=True)
+    # Subtasks: a task may have a parent (self-referential FK). Deleting a parent
+    # cascades to its children so no orphaned subtasks remain.
+    parent_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    parent = relationship("Task", remote_side=[id], back_populates="subtasks")
+    subtasks = relationship("Task", back_populates="parent", cascade="all, delete-orphan")
 
 
 class Setting(Base):

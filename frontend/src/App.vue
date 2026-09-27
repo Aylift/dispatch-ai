@@ -579,6 +579,109 @@ async function saveDescription(task) {
   }
 }
 
+// ---- Subtasks -------------------------------------------------------------
+// A task with children shows a compact progress indicator on its row and a
+// full subtask editor in the detail panel. Completion is bidirectional:
+// completing a parent marks all subtasks done; completing the last subtask
+// auto-completes the parent (backend enforces both, we mirror optimistically).
+const subtaskDraft = ref('')
+
+function subtasksOf(task) {
+  return task.subtasks || []
+}
+
+function subtaskProgress(task) {
+  const subs = subtasksOf(task)
+  return { done: subs.filter(s => s.done).length, total: subs.length }
+}
+
+// Parent checkbox tri-state: 'checked' when all subtasks done, 'indeterminate'
+// when some (but not all) are done, 'unchecked' when none are done.
+function parentTriState(task) {
+  const { done, total } = subtaskProgress(task)
+  if (!total) return task.done ? 'checked' : 'unchecked'
+  if (done === total) return 'checked'
+  if (done > 0) return 'indeterminate'
+  return 'unchecked'
+}
+
+// Clicking a parent checkbox: if it's fully checked, un-complete all subtasks;
+// otherwise complete all subtasks. A parent with no subtasks behaves like a
+// normal task toggle.
+async function toggleParent(task) {
+  const subs = subtasksOf(task)
+  if (!subs.length) {
+    await toggleDone(task)
+    return
+  }
+  const allDone = subs.every(s => s.done)
+  const next = !allDone
+  for (const s of subs) s.done = next
+  task.done = next
+  try {
+    const updated = await updateTask(task.id, { done: next })
+    task.done = updated.done
+    // Backend returns the parent with its subtasks; sync their done state.
+    if (updated.subtasks) {
+      for (const s of subs) {
+        const match = updated.subtasks.find(u => u.id === s.id)
+        if (match) s.done = match.done
+      }
+    }
+  } catch (err) {
+    console.error(err)
+    for (const s of subs) s.done = !next
+    task.done = !next
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+async function toggleSubtask(task, sub) {
+  const next = !sub.done
+  sub.done = next
+  try {
+    const updated = await updateTask(sub.id, { done: next })
+    sub.done = updated.done
+    // Backend auto-completes the parent when all siblings are done, and
+    // un-completes it when a subtask is un-done. Re-fetch the parent to mirror.
+    const parent = await updateTask(task.id, {}).catch(() => null)
+    if (parent) task.done = parent.done
+  } catch (err) {
+    console.error(err)
+    sub.done = !next
+    connectionError.value = 'Could not update task — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+async function addSubtask(task) {
+  const text = subtaskDraft.value.trim()
+  if (!text) return
+  subtaskDraft.value = ''
+  try {
+    const created = await createTask(text, task.priority, null, false, task.id)
+    if (!task.subtasks) task.subtasks = []
+    task.subtasks.push(created)
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not add subtask — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+async function deleteSubtask(task, sub) {
+  const idx = (task.subtasks || []).findIndex(s => s.id === sub.id)
+  if (idx !== -1) task.subtasks.splice(idx, 1)
+  try {
+    await deleteTask(sub.id)
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not delete subtask — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
 // Auto-grow the description textarea: starts at ~3 lines, grows to ~10 lines,
 // then scrolls. No external dependency.
 const DESC_MIN_LINES = 3
@@ -910,8 +1013,9 @@ onUnmounted(() => {
             <input
               type="checkbox"
               :checked="item.task.done"
+              :ref="(el) => { if (el) el.indeterminate = parentTriState(item.task) === 'indeterminate' }"
               @click.stop
-              @change="item.task.done = !item.task.done; toggleDone(item.task)"
+              @change="subtasksOf(item.task).length ? toggleParent(item.task) : (item.task.done = !item.task.done, toggleDone(item.task))"
               class="appearance-none w-4 h-4 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0 mt-0.5"
               :class="{ 'opacity-40': item.task.done }"
             />
@@ -934,6 +1038,12 @@ onUnmounted(() => {
                 :class="item.task.done ? 'line-through text-zinc-600' : 'text-zinc-200'"
                 :title="'Click to edit title'"
               >{{ item.task.text }}</span>
+              <span
+                v-if="subtasksOf(item.task).length"
+                data-testid="task-subtask-count"
+                class="shrink-0 text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400"
+                :title="'Subtasks'"
+              >{{ subtaskProgress(item.task).done }}/{{ subtaskProgress(item.task).total }}</span>
               <PriorityMeter
                 :modelValue="item.task.priority"
                 size="xs"
@@ -1068,6 +1178,52 @@ onUnmounted(() => {
               class="w-full bg-zinc-900 border border-zinc-700/60 rounded p-2 text-xs text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-sky-500/50 overflow-y-hidden"
               rows="3"
             ></textarea>
+            <div class="mt-2" data-testid="subtasks">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] uppercase tracking-wider text-zinc-500">Subtasks</span>
+                <span v-if="subtasksOf(item.task).length" class="text-[10px] text-zinc-500 tabular-nums">{{ subtaskProgress(item.task).done }}/{{ subtaskProgress(item.task).total }}</span>
+              </div>
+              <div v-if="subtasksOf(item.task).length" class="space-y-1 mb-1.5">
+                <div
+                  v-for="sub in subtasksOf(item.task)"
+                  :key="sub.id"
+                  class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-zinc-800/60"
+                  data-testid="subtask-row"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="sub.done"
+                    @click.stop
+                    @change="toggleSubtask(item.task, sub)"
+                    class="appearance-none w-3.5 h-3.5 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0"
+                  />
+                  <span
+                    class="flex-1 min-w-0 text-xs truncate"
+                    :class="sub.done ? 'line-through text-zinc-600' : 'text-zinc-300'"
+                  >{{ sub.text }}</span>
+                  <button
+                    data-testid="subtask-delete"
+                    @click.stop="deleteSubtask(item.task, sub)"
+                    class="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                    title="Delete subtask"
+                  ><AppIcon name="trash" class="w-3 h-3" /></button>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input
+                  v-model="subtaskDraft"
+                  data-testid="subtask-input"
+                  @keydown.enter="addSubtask(item.task)"
+                  placeholder="+ Add subtask"
+                  class="flex-1 min-w-0 bg-zinc-900 border border-zinc-700/60 rounded px-2 py-1 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-sky-500/50"
+                />
+                <button
+                  data-testid="subtask-add"
+                  @click="addSubtask(item.task)"
+                  class="text-xs px-2 py-1 rounded border border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-colors cursor-pointer shrink-0"
+                >Add</button>
+              </div>
+            </div>
           </div>
           </div>
           </template>
@@ -1322,8 +1478,9 @@ onUnmounted(() => {
             <input
               type="checkbox"
               :checked="item.task.done"
+              :ref="(el) => { if (el) el.indeterminate = parentTriState(item.task) === 'indeterminate' }"
               @click.stop
-              @change="item.task.done = !item.task.done; toggleDone(item.task)"
+              @change="subtasksOf(item.task).length ? toggleParent(item.task) : (item.task.done = !item.task.done, toggleDone(item.task))"
               class="appearance-none w-4 h-4 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0 mt-0.5"
               :class="{ 'opacity-40': item.task.done }"
             />
@@ -1346,6 +1503,12 @@ onUnmounted(() => {
                 :class="item.task.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
                 :title="'Click to edit title'"
               >{{ item.task.text }}</span>
+              <span
+                v-if="subtasksOf(item.task).length"
+                data-testid="task-subtask-count"
+                class="shrink-0 text-[10px] tabular-nums px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500"
+                :title="'Subtasks'"
+              >{{ subtaskProgress(item.task).done }}/{{ subtaskProgress(item.task).total }}</span>
               <PriorityMeter
                 :modelValue="item.task.priority"
                 size="xs"
@@ -1480,6 +1643,52 @@ onUnmounted(() => {
               class="w-full bg-zinc-50 border border-zinc-200 rounded p-2 text-xs text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400/60 overflow-y-hidden"
               rows="3"
             ></textarea>
+            <div class="mt-2" data-testid="subtasks">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] uppercase tracking-wider text-zinc-400">Subtasks</span>
+                <span v-if="subtasksOf(item.task).length" class="text-[10px] text-zinc-400 tabular-nums">{{ subtaskProgress(item.task).done }}/{{ subtaskProgress(item.task).total }}</span>
+              </div>
+              <div v-if="subtasksOf(item.task).length" class="space-y-1 mb-1.5">
+                <div
+                  v-for="sub in subtasksOf(item.task)"
+                  :key="sub.id"
+                  class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-zinc-50"
+                  data-testid="subtask-row"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="sub.done"
+                    @click.stop
+                    @change="toggleSubtask(item.task, sub)"
+                    class="appearance-none w-3.5 h-3.5 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0"
+                  />
+                  <span
+                    class="flex-1 min-w-0 text-xs truncate"
+                    :class="sub.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
+                  >{{ sub.text }}</span>
+                  <button
+                    data-testid="subtask-delete"
+                    @click.stop="deleteSubtask(item.task, sub)"
+                    class="text-zinc-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
+                    title="Delete subtask"
+                  ><AppIcon name="trash" class="w-3 h-3" /></button>
+                </div>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <input
+                  v-model="subtaskDraft"
+                  data-testid="subtask-input"
+                  @keydown.enter="addSubtask(item.task)"
+                  placeholder="+ Add subtask"
+                  class="flex-1 min-w-0 bg-zinc-50 border border-zinc-200 rounded px-2 py-1 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:border-sky-400/60"
+                />
+                <button
+                  data-testid="subtask-add"
+                  @click="addSubtask(item.task)"
+                  class="text-xs px-2 py-1 rounded border border-zinc-200 text-zinc-500 hover:text-zinc-700 hover:border-zinc-300 transition-colors cursor-pointer shrink-0"
+                >Add</button>
+              </div>
+            </div>
           </div>
           </div>
           </template>

@@ -402,3 +402,92 @@ def test_settings_update_page_size(client):
     assert res.json()["page_size"] == 25
 
 
+def test_create_subtask(client):
+    parent = client.post("/tasks", json={"text": "parent"}).json()
+    res = client.post("/tasks", json={"text": "child", "parent_id": parent["id"]})
+    assert res.status_code == 201
+    child = res.json()
+    assert child["parent_id"] == parent["id"]
+    # Parent lists the child in its subtasks.
+    got = client.get("/tasks").json()
+    p = next(t for t in got if t["id"] == parent["id"])
+    assert [s["id"] for s in p["subtasks"]] == [child["id"]]
+
+
+def test_create_subtask_missing_parent_404(client):
+    res = client.post("/tasks", json={"text": "child", "parent_id": 99999})
+    assert res.status_code == 404
+
+
+def test_completing_parent_marks_subtasks_done(client):
+    parent = client.post("/tasks", json={"text": "parent"}).json()
+    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    res = client.patch(f"/tasks/{parent['id']}", json={"done": True})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["done"] is True
+    assert all(s["done"] for s in body["subtasks"])
+    # Both children are done in the DB.
+    got = client.get("/tasks").json()
+    c1b = next(t for t in got if t["id"] == c1["id"])
+    c2b = next(t for t in got if t["id"] == c2["id"])
+    assert c1b["done"] is True and c2b["done"] is True
+
+
+def test_completing_last_subtask_auto_completes_parent(client):
+    parent = client.post("/tasks", json={"text": "parent"}).json()
+    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    client.patch(f"/tasks/{c1['id']}", json={"done": True})
+    # Parent not yet done (one sibling still open).
+    got = client.get("/tasks").json()
+    assert next(t for t in got if t["id"] == parent["id"])["done"] is False
+    client.patch(f"/tasks/{c2['id']}", json={"done": True})
+    got = client.get("/tasks").json()
+    assert next(t for t in got if t["id"] == parent["id"])["done"] is True
+
+
+def test_uncompleting_subtask_uncompletes_parent(client):
+    parent = client.post("/tasks", json={"text": "parent"}).json()
+    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    client.patch(f"/tasks/{c1['id']}", json={"done": True})
+    client.patch(f"/tasks/{c2['id']}", json={"done": True})
+    got = client.get("/tasks").json()
+    assert next(t for t in got if t["id"] == parent["id"])["done"] is True
+    # Un-complete one subtask -> parent becomes undone.
+    client.patch(f"/tasks/{c1['id']}", json={"done": False})
+    got = client.get("/tasks").json()
+    assert next(t for t in got if t["id"] == parent["id"])["done"] is False
+
+
+def test_task_cannot_be_own_parent(client):
+    parent = client.post("/tasks", json={"text": "parent"}).json()
+    res = client.patch(f"/tasks/{parent['id']}", json={"parent_id": parent["id"]})
+    assert res.status_code == 400
+
+
+def test_reparent_task(client):
+    a = client.post("/tasks", json={"text": "a"}).json()
+    b = client.post("/tasks", json={"text": "b"}).json()
+    res = client.patch(f"/tasks/{b['id']}", json={"parent_id": a["id"]})
+    assert res.status_code == 200
+    assert res.json()["parent_id"] == a["id"]
+    got = client.get("/tasks").json()
+    pa = next(t for t in got if t["id"] == a["id"])
+    assert b["id"] in [s["id"] for s in pa["subtasks"]]
+
+
+def test_delete_parent_cascades_subtasks(client):
+    parent = client.post("/tasks", json={"text": "parent"}).json()
+    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    res = client.delete(f"/tasks/{parent['id']}")
+    assert res.status_code == 204
+    got = client.get("/tasks").json()
+    ids = [t["id"] for t in got]
+    assert parent["id"] not in ids
+    assert c1["id"] not in ids and c2["id"] not in ids
+
+

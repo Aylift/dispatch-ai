@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import init_db, get_db, run_migrations
@@ -13,6 +14,19 @@ from models import Task, Setting
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskParseIn
 from agent import transcribe_audio, parse_tasks
 from stream_agent import stream_transcribe, _ts
+
+
+# Eager-load subtasks to a bounded depth so serialization never triggers a lazy
+# load (which fails in the async session) and never recurses infinitely.
+SUBTASK_DEPTH = 3
+
+
+def _subtask_load():
+    load = selectinload(Task.subtasks)
+    current = load
+    for _ in range(SUBTASK_DEPTH - 1):
+        current = current.selectinload(Task.subtasks)
+    return current
 
 
 @asynccontextmanager
@@ -119,9 +133,11 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
         task.elapsed_seconds = 0
     await db.commit()
 
-    # Sort by priority (1=highest) first, then undone first, then newest
+    # Sort by priority (1=highest) first, then undone first, then newest.
+    # Eager-load subtasks so serialization doesn't trigger lazy loads.
     result = await db.execute(
         select(Task)
+        .options(_subtask_load())
         .order_by(Task.done.asc(), Task.priority.asc(), Task.id.desc())
     )
     return result.scalars().all()
@@ -129,6 +145,10 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
 
 @app.post("/tasks", response_model=TaskOut, status_code=201)
 async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
+    if body.parent_id is not None:
+        parent = await db.get(Task, body.parent_id)
+        if not parent:
+            raise HTTPException(404, "Parent task not found")
     task = Task(
         text=body.text,
         description=body.description,
@@ -136,11 +156,14 @@ async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
         recurring=body.recurring,
         timebox_minutes=body.timebox_minutes,
         due_date=body.due_date,
+        parent_id=body.parent_id,
     )
     db.add(task)
     await db.commit()
-    await db.refresh(task)
-    return task
+    result = await db.execute(
+        select(Task).options(_subtask_load()).where(Task.id == task.id)
+    )
+    return result.scalar_one()
 
 
 @app.post("/tasks/parse", response_model=list[TaskOut], status_code=201)
@@ -159,9 +182,11 @@ async def parse_and_create_tasks(body: TaskParseIn, db: AsyncSession = Depends(g
         db.add(task)
         created.append(task)
     await db.commit()
-    for task in created:
-        await db.refresh(task)
-    return created
+    ids = [t.id for t in created]
+    result = await db.execute(
+        select(Task).options(_subtask_load()).where(Task.id.in_(ids))
+    )
+    return result.scalars().all()
 
 
 def _finalize_elapsed(task: Task) -> None:
@@ -177,7 +202,9 @@ def _finalize_elapsed(task: Task) -> None:
 
 @app.patch("/tasks/{task_id}", response_model=TaskOut)
 async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    result = await db.execute(
+        select(Task).options(_subtask_load()).where(Task.id == task_id)
+    )
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(404, "Task not found")
@@ -194,6 +221,28 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         _finalize_elapsed(task)
         if body.done:
             task.status = "todo"
+        # Subtask completion semantics:
+        #  - Completing a parent marks all its subtasks complete.
+        #  - Completing a subtask checks its siblings; if all are done the parent
+        #    auto-completes. Un-completing a subtask un-completes the parent.
+        if task.subtasks and body.done:
+            for sub in task.subtasks:
+                sub.done = True
+                sub.status = "todo"
+                _finalize_elapsed(sub)
+        if task.parent_id is not None:
+            parent = await db.get(Task, task.parent_id)
+            if parent is not None:
+                if body.done:
+                    siblings = await db.execute(
+                        select(Task).where(Task.parent_id == parent.id)
+                    )
+                    if all(s.done for s in siblings.scalars().all()):
+                        parent.done = True
+                        parent.status = "todo"
+                        _finalize_elapsed(parent)
+                else:
+                    parent.done = False
     if body.priority is not None:
         task.priority = body.priority
     if body.tags is not None:
@@ -227,9 +276,20 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
         task.elapsed_seconds = 0
         task.started_at = None
         task.status = "todo"
+    if "parent_id" in body.model_fields_set:
+        # Reparent a task. A parent cannot be its own descendant (no cycles).
+        if body.parent_id is not None:
+            if body.parent_id == task.id:
+                raise HTTPException(400, "A task cannot be its own parent")
+            parent = await db.get(Task, body.parent_id)
+            if not parent:
+                raise HTTPException(404, "Parent task not found")
+        task.parent_id = body.parent_id
     await db.commit()
-    await db.refresh(task)
-    return task
+    result = await db.execute(
+        select(Task).options(_subtask_load()).where(Task.id == task.id)
+    )
+    return result.scalar_one()
 
 
 @app.delete("/tasks", status_code=204)
