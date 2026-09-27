@@ -1060,17 +1060,17 @@ onUnmounted(() => {
                   : item.task.status === 'paused'
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                     : 'text-zinc-500 border-zinc-700/50 hover:text-emerald-300 hover:border-emerald-500/40'"
-                :title="item.task.status === 'active' ? 'Pause task' : 'Start task'"
+                :title="item.task.status === 'active' ? 'Pause timer' : 'Start timer'"
               >
-                <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
+                <AppIcon :name="item.task.status === 'active' ? 'pause' : 'timer'" class="w-3 h-3" />
                 <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
               </button>
               <button
                 data-testid="task-expand"
                 @click.stop="toggleExpand(item.task)"
-                class="text-zinc-500 hover:text-sky-300 transition-colors shrink-0 cursor-pointer px-0.5"
-                :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
-              ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5" /></button>
+                class="text-zinc-500 hover:text-sky-300 hover:bg-zinc-800 rounded transition-colors shrink-0 cursor-pointer p-0.5"
+                :title="expandedId === item.task.id ? 'Collapse details' : 'Expand details'"
+              ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-4 h-4" /></button>
               <div class="relative shrink-0" @click.stop>
                 <button
                   data-testid="task-menu"
@@ -1525,17 +1525,17 @@ onUnmounted(() => {
                   : item.task.status === 'paused'
                     ? 'bg-amber-500/15 text-amber-600 border-amber-500/40'
                     : 'text-zinc-400 border-zinc-200 hover:text-emerald-600 hover:border-emerald-400/50'"
-                :title="item.task.status === 'active' ? 'Pause task' : 'Start task'"
+                :title="item.task.status === 'active' ? 'Pause timer' : 'Start timer'"
               >
-                <AppIcon :name="item.task.status === 'active' ? 'pause' : 'play'" class="w-3 h-3" />
+                <AppIcon :name="item.task.status === 'active' ? 'pause' : 'timer'" class="w-3 h-3" />
                 <span v-if="item.task.status === 'active' || item.task.status === 'paused'">{{ formatDuration(effectiveElapsed(item.task)) }}</span>
               </button>
               <button
                 data-testid="task-expand"
                 @click.stop="toggleExpand(item.task)"
-                class="text-zinc-400 hover:text-sky-600 transition-colors shrink-0 cursor-pointer px-0.5"
-                :title="expandedId === item.task.id ? 'Collapse' : 'Expand'"
-              ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-3.5 h-3.5" /></button>
+                class="text-zinc-400 hover:text-sky-600 hover:bg-zinc-100 rounded transition-colors shrink-0 cursor-pointer p-0.5"
+                :title="expandedId === item.task.id ? 'Collapse details' : 'Expand details'"
+              ><AppIcon :name="expandedId === item.task.id ? 'chevron-down' : 'chevron-right'" class="w-4 h-4" /></button>
               <div class="relative shrink-0" @click.stop>
                 <button
                   data-testid="task-menu"

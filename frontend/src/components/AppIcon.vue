@@ -108,6 +108,14 @@ defineProps({
       <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none"/>
     </template>
 
+    <!-- Stopwatch (focus timer) -->
+    <template v-else-if="name === 'timer'">
+      <circle cx="12" cy="13" r="8"/>
+      <path d="M12 9v4l2.5 2.5"/>
+      <path d="M9 2h6"/>
+      <path d="M12 2v3"/>
+    </template>
+
     <!-- More / overflow menu (three dots) -->
     <template v-else-if="name === 'more'">
       <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
