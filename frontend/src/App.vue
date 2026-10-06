@@ -586,8 +586,84 @@ async function saveDescription(task) {
 // auto-completes the parent (backend enforces both, we mirror optimistically).
 const subtaskDraft = ref('')
 
+// Subtask inline editing: title (single-click) and description (expandable).
+const editingSubId = ref(null)
+const editingSubText = ref('')
+const expandedSubId = ref(null)   // subtask whose description editor is open
+const subDescDraft = ref('')
+let subEditInputEl = null
+let subDescInputEl = null
+
 function subtasksOf(task) {
   return task.subtasks || []
+}
+
+function startEditSub(sub) {
+  editingSubId.value = sub.id
+  editingSubText.value = sub.text
+  requestAnimationFrame(() => {
+    if (subEditInputEl) {
+      subEditInputEl.focus()
+      subEditInputEl.select()
+    }
+  })
+}
+
+function cancelEditSub() {
+  editingSubId.value = null
+  editingSubText.value = ''
+}
+
+async function saveEditSub(sub) {
+  const text = editingSubText.value.trim()
+  cancelEditSub()
+  if (!text || text === sub.text) return
+  try {
+    const updated = await updateTask(sub.id, { text })
+    sub.text = updated.text
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update subtask — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+function toggleSubDesc(sub) {
+  if (expandedSubId.value === sub.id) {
+    expandedSubId.value = null
+    return
+  }
+  expandedSubId.value = sub.id
+  subDescDraft.value = sub.description || ''
+  requestAnimationFrame(() => {
+    if (subDescInputEl) {
+      subDescInputEl.focus()
+      autoGrowSubDesc()
+    }
+  })
+}
+
+async function saveSubDesc(sub) {
+  const desc = subDescDraft.value.trim()
+  if (desc === (sub.description || '')) return
+  try {
+    const updated = await updateTask(sub.id, { description: desc || null })
+    sub.description = updated.description
+  } catch (err) {
+    console.error(err)
+    connectionError.value = 'Could not update subtask — backend unreachable.'
+    appStatus.value = 'error'
+  }
+}
+
+function autoGrowSubDesc() {
+  const el = subDescInputEl
+  if (!el) return
+  el.style.height = 'auto'
+  const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 16
+  const maxHeight = lineHeight * 6
+  el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px'
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
 }
 
 function subtaskProgress(task) {
@@ -1187,26 +1263,60 @@ onUnmounted(() => {
                 <div
                   v-for="sub in subtasksOf(item.task)"
                   :key="sub.id"
-                  class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-zinc-800/60"
+                  class="px-1.5 py-1 rounded hover:bg-zinc-800/60"
                   data-testid="subtask-row"
                 >
-                  <input
-                    type="checkbox"
-                    :checked="sub.done"
-                    @click.stop
-                    @change="toggleSubtask(item.task, sub)"
-                    class="appearance-none w-3.5 h-3.5 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0"
-                  />
-                  <span
-                    class="flex-1 min-w-0 text-xs truncate"
-                    :class="sub.done ? 'line-through text-zinc-600' : 'text-zinc-300'"
-                  >{{ sub.text }}</span>
-                  <button
-                    data-testid="subtask-delete"
-                    @click.stop="deleteSubtask(item.task, sub)"
-                    class="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer shrink-0"
-                    title="Delete subtask"
-                  ><AppIcon name="trash" class="w-3 h-3" /></button>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      :checked="sub.done"
+                      @click.stop
+                      @change="toggleSubtask(item.task, sub)"
+                      class="appearance-none w-3.5 h-3.5 rounded border-2 border-zinc-600 checked:border-sky-500 checked:bg-sky-500/20 transition-all cursor-pointer shrink-0"
+                    />
+                    <input
+                      v-if="editingSubId === sub.id"
+                      ref="subEditInputEl"
+                      v-model="editingSubText"
+                      data-testid="subtask-title-input"
+                      @click.stop
+                      @keydown.enter="saveEditSub(sub)"
+                      @keydown.esc="cancelEditSub"
+                      @blur="saveEditSub(sub)"
+                      class="flex-1 min-w-0 text-xs bg-zinc-900 border border-sky-500/60 rounded px-1.5 py-0.5 text-zinc-100 focus:outline-none"
+                    />
+                    <span
+                      v-else
+                      @click.stop="startEditSub(sub)"
+                      class="flex-1 min-w-0 text-xs truncate cursor-text"
+                      :class="sub.done ? 'line-through text-zinc-600' : 'text-zinc-300'"
+                      title="Click to edit subtask"
+                    >{{ sub.text }}</span>
+                    <button
+                      data-testid="subtask-desc-toggle"
+                      @click.stop="toggleSubDesc(sub)"
+                      class="text-zinc-600 hover:text-sky-300 transition-colors cursor-pointer shrink-0"
+                      :title="expandedSubId === sub.id ? 'Hide description' : 'Add description'"
+                    ><AppIcon :name="expandedSubId === sub.id ? 'chevron-down' : 'chevron-right'" class="w-3 h-3" /></button>
+                    <button
+                      data-testid="subtask-delete"
+                      @click.stop="deleteSubtask(item.task, sub)"
+                      class="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                      title="Delete subtask"
+                    ><AppIcon name="trash" class="w-3 h-3" /></button>
+                  </div>
+                  <div v-if="expandedSubId === sub.id" class="mt-1 ml-5">
+                    <textarea
+                      ref="subDescInputEl"
+                      v-model="subDescDraft"
+                      data-testid="subtask-description-input"
+                      @blur="saveSubDesc(sub)"
+                      @input="autoGrowSubDesc"
+                      placeholder="Add a description..."
+                      class="w-full bg-zinc-900 border border-zinc-700/60 rounded p-1.5 text-[11px] text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-sky-500/50 overflow-y-hidden"
+                      rows="2"
+                    ></textarea>
+                  </div>
                 </div>
               </div>
               <div class="flex items-center gap-1.5">
@@ -1652,26 +1762,60 @@ onUnmounted(() => {
                 <div
                   v-for="sub in subtasksOf(item.task)"
                   :key="sub.id"
-                  class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-zinc-50"
+                  class="px-1.5 py-1 rounded hover:bg-zinc-50"
                   data-testid="subtask-row"
                 >
-                  <input
-                    type="checkbox"
-                    :checked="sub.done"
-                    @click.stop
-                    @change="toggleSubtask(item.task, sub)"
-                    class="appearance-none w-3.5 h-3.5 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0"
-                  />
-                  <span
-                    class="flex-1 min-w-0 text-xs truncate"
-                    :class="sub.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
-                  >{{ sub.text }}</span>
-                  <button
-                    data-testid="subtask-delete"
-                    @click.stop="deleteSubtask(item.task, sub)"
-                    class="text-zinc-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
-                    title="Delete subtask"
-                  ><AppIcon name="trash" class="w-3 h-3" /></button>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      :checked="sub.done"
+                      @click.stop
+                      @change="toggleSubtask(item.task, sub)"
+                      class="appearance-none w-3.5 h-3.5 rounded border-2 border-zinc-300 checked:border-sky-500 checked:bg-sky-500 transition-all cursor-pointer shrink-0"
+                    />
+                    <input
+                      v-if="editingSubId === sub.id"
+                      ref="subEditInputEl"
+                      v-model="editingSubText"
+                      data-testid="subtask-title-input"
+                      @click.stop
+                      @keydown.enter="saveEditSub(sub)"
+                      @keydown.esc="cancelEditSub"
+                      @blur="saveEditSub(sub)"
+                      class="flex-1 min-w-0 text-xs bg-white border border-sky-400/70 rounded px-1.5 py-0.5 text-zinc-800 focus:outline-none"
+                    />
+                    <span
+                      v-else
+                      @click.stop="startEditSub(sub)"
+                      class="flex-1 min-w-0 text-xs truncate cursor-text"
+                      :class="sub.done ? 'line-through text-zinc-400' : 'text-zinc-700'"
+                      title="Click to edit subtask"
+                    >{{ sub.text }}</span>
+                    <button
+                      data-testid="subtask-desc-toggle"
+                      @click.stop="toggleSubDesc(sub)"
+                      class="text-zinc-400 hover:text-sky-600 transition-colors cursor-pointer shrink-0"
+                      :title="expandedSubId === sub.id ? 'Hide description' : 'Add description'"
+                    ><AppIcon :name="expandedSubId === sub.id ? 'chevron-down' : 'chevron-right'" class="w-3 h-3" /></button>
+                    <button
+                      data-testid="subtask-delete"
+                      @click.stop="deleteSubtask(item.task, sub)"
+                      class="text-zinc-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
+                      title="Delete subtask"
+                    ><AppIcon name="trash" class="w-3 h-3" /></button>
+                  </div>
+                  <div v-if="expandedSubId === sub.id" class="mt-1 ml-5">
+                    <textarea
+                      ref="subDescInputEl"
+                      v-model="subDescDraft"
+                      data-testid="subtask-description-input"
+                      @blur="saveSubDesc(sub)"
+                      @input="autoGrowSubDesc"
+                      placeholder="Add a description..."
+                      class="w-full bg-zinc-50 border border-zinc-200 rounded p-1.5 text-[11px] text-zinc-700 placeholder-zinc-400 resize-none focus:outline-none focus:border-sky-400/60 overflow-y-hidden"
+                      rows="2"
+                    ></textarea>
+                  </div>
                 </div>
               </div>
               <div class="flex items-center gap-1.5">

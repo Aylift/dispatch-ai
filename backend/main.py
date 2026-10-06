@@ -145,16 +145,19 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
 
 @app.post("/tasks", response_model=TaskOut, status_code=201)
 async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
-    if body.parent_id is not None:
+    is_subtask = body.parent_id is not None
+    if is_subtask:
         parent = await db.get(Task, body.parent_id)
         if not parent:
             raise HTTPException(404, "Parent task not found")
     task = Task(
         text=body.text,
         description=body.description,
-        priority=body.priority,
-        recurring=body.recurring,
-        timebox_minutes=body.timebox_minutes,
+        # Subtasks carry no priority/timer/recurring semantics: they inherit the
+        # parent's priority and are never timeboxed or recurring.
+        priority=body.priority if not is_subtask else 3,
+        recurring=False if is_subtask else body.recurring,
+        timebox_minutes=None if is_subtask else body.timebox_minutes,
         due_date=body.due_date,
         parent_id=body.parent_id,
     )
@@ -243,19 +246,22 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
                         _finalize_elapsed(parent)
                 else:
                     parent.done = False
-    if body.priority is not None:
+    # Subtasks have no priority/timer/recurring semantics; ignore those fields so
+    # the UI can't accidentally give a subtask its own priority or focus timer.
+    is_subtask = task.parent_id is not None
+    if body.priority is not None and not is_subtask:
         task.priority = body.priority
     if body.tags is not None:
         task.tags = body.tags
-    if body.recurring is not None:
+    if body.recurring is not None and not is_subtask:
         task.recurring = body.recurring
         if not body.recurring:
             task.last_completed_date = None
-    if "timebox_minutes" in body.model_fields_set:
+    if "timebox_minutes" in body.model_fields_set and not is_subtask:
         task.timebox_minutes = body.timebox_minutes
     if body.due_date is not None:
         task.due_date = body.due_date
-    if body.status is not None:
+    if body.status is not None and not is_subtask:
         if body.status == "active":
             # Starting: fold any prior running time, then begin a fresh session.
             _finalize_elapsed(task)
