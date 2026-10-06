@@ -420,9 +420,9 @@ def test_create_subtask_missing_parent_404(client):
 
 
 def test_completing_parent_marks_subtasks_done(client):
-    parent = client.post("/tasks", json={"text": "parent"}).json()
-    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
-    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    parent = client.post("/tasks", json={"text": "parent task"}).json()
+    c1 = client.post("/tasks", json={"text": "child one", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "child two", "parent_id": parent["id"]}).json()
     res = client.patch(f"/tasks/{parent['id']}", json={"done": True})
     assert res.status_code == 200
     body = res.json()
@@ -436,9 +436,9 @@ def test_completing_parent_marks_subtasks_done(client):
 
 
 def test_completing_last_subtask_auto_completes_parent(client):
-    parent = client.post("/tasks", json={"text": "parent"}).json()
-    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
-    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    parent = client.post("/tasks", json={"text": "parent task"}).json()
+    c1 = client.post("/tasks", json={"text": "child one", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "child two", "parent_id": parent["id"]}).json()
     client.patch(f"/tasks/{c1['id']}", json={"done": True})
     # Parent not yet done (one sibling still open).
     got = client.get("/tasks").json()
@@ -449,9 +449,9 @@ def test_completing_last_subtask_auto_completes_parent(client):
 
 
 def test_uncompleting_subtask_uncompletes_parent(client):
-    parent = client.post("/tasks", json={"text": "parent"}).json()
-    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
-    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    parent = client.post("/tasks", json={"text": "parent task"}).json()
+    c1 = client.post("/tasks", json={"text": "child one", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "child two", "parent_id": parent["id"]}).json()
     client.patch(f"/tasks/{c1['id']}", json={"done": True})
     client.patch(f"/tasks/{c2['id']}", json={"done": True})
     got = client.get("/tasks").json()
@@ -463,14 +463,14 @@ def test_uncompleting_subtask_uncompletes_parent(client):
 
 
 def test_task_cannot_be_own_parent(client):
-    parent = client.post("/tasks", json={"text": "parent"}).json()
+    parent = client.post("/tasks", json={"text": "parent task"}).json()
     res = client.patch(f"/tasks/{parent['id']}", json={"parent_id": parent["id"]})
     assert res.status_code == 400
 
 
 def test_reparent_task(client):
-    a = client.post("/tasks", json={"text": "a"}).json()
-    b = client.post("/tasks", json={"text": "b"}).json()
+    a = client.post("/tasks", json={"text": "task a"}).json()
+    b = client.post("/tasks", json={"text": "task b"}).json()
     res = client.patch(f"/tasks/{b['id']}", json={"parent_id": a["id"]})
     assert res.status_code == 200
     assert res.json()["parent_id"] == a["id"]
@@ -480,9 +480,9 @@ def test_reparent_task(client):
 
 
 def test_delete_parent_cascades_subtasks(client):
-    parent = client.post("/tasks", json={"text": "parent"}).json()
-    c1 = client.post("/tasks", json={"text": "c1", "parent_id": parent["id"]}).json()
-    c2 = client.post("/tasks", json={"text": "c2", "parent_id": parent["id"]}).json()
+    parent = client.post("/tasks", json={"text": "parent task"}).json()
+    c1 = client.post("/tasks", json={"text": "child one", "parent_id": parent["id"]}).json()
+    c2 = client.post("/tasks", json={"text": "child two", "parent_id": parent["id"]}).json()
     res = client.delete(f"/tasks/{parent['id']}")
     assert res.status_code == 204
     got = client.get("/tasks").json()

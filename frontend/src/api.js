@@ -1,5 +1,19 @@
 const BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
+// Build an Error from a failed response, carrying the HTTP status so callers
+// can distinguish validation (422) from connectivity failures. FastAPI returns
+// {"detail": "..."} for HTTPException; fall back to a generic message.
+async function apiError(res, fallback) {
+  let message = fallback
+  try {
+    const data = await res.json()
+    if (data && typeof data.detail === 'string') message = data.detail
+  } catch { /* not JSON */ }
+  const err = new Error(message)
+  err.status = res.status
+  return err
+}
+
 // Ping backend + DB readiness. 200/ok means the API is up AND the DB is usable.
 export async function checkHealth() {
   const res = await fetch(`${BASE}/health`, { method: 'GET' })
@@ -34,7 +48,7 @@ export async function createTask(text, priority = 3, description = null, recurri
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, priority, description, recurring, parent_id: parentId }),
   })
-  if (!res.ok) throw new Error('Failed to create task')
+  if (!res.ok) throw await apiError(res, 'Failed to create task')
   return res.json()
 }
 
@@ -46,7 +60,7 @@ export async function parseTasks(text) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
   })
-  if (!res.ok) throw new Error('Failed to parse tasks')
+  if (!res.ok) throw await apiError(res, 'Failed to parse tasks')
   return res.json()
 }
 

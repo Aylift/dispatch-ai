@@ -281,8 +281,13 @@ function stopWatchdog() {
 }
 
 // ---- Task operations -----------------------------------------------------
+// Inline validation message shown under the input when the backend rejects the
+// text (too short / filler-only). Cleared on the next successful submit.
+const validationError = ref('')
+
 async function handleDump() {
   if (!brainDump.value.trim()) return
+  validationError.value = ''
   try {
     const task = await createTask(brainDump.value, selectedPriority.value)
     tasks.value.unshift(task)
@@ -290,6 +295,11 @@ async function handleDump() {
     selectedPriority.value = 3
   } catch (err) {
     console.error('add task failed:', err)
+    // A 422 is a validation rejection (bad text), not a connectivity problem.
+    if (err.status === 422) {
+      validationError.value = err.message
+      return
+    }
     connectionError.value = 'Could not add task — backend unreachable.'
     appStatus.value = 'error'
   }
@@ -297,6 +307,7 @@ async function handleDump() {
 
 async function handleParse() {
   if (!brainDump.value.trim() || isParsing.value) return
+  validationError.value = ''
   isParsing.value = true
   try {
     const created = await parseTasks(brainDump.value)
@@ -305,6 +316,10 @@ async function handleParse() {
     selectedPriority.value = 3
   } catch (err) {
     console.error('AI parse failed:', err)
+    if (err.status === 422) {
+      validationError.value = err.message
+      return
+    }
     connectionError.value = 'AI organize failed — backend unreachable.'
     appStatus.value = 'error'
   } finally {
@@ -973,6 +988,9 @@ onUnmounted(() => {
       <div v-if="isListening" class="text-[11px] text-red-400/80 mt-1.5 mb-1 animate-pulse">
         <AppIcon name="mic" class="w-3 h-3 inline-block -mt-0.5" /> Listening — tap the mic or press Enter when done
       </div>
+      <div v-if="validationError" data-testid="validation-error" class="text-[11px] text-amber-400/90 mt-1.5 mb-1 flex items-center gap-1.5">
+        <AppIcon name="alert" class="w-3 h-3 shrink-0" /> {{ validationError }}
+      </div>
       <div class="flex gap-2 mt-2">
         <button
           @click="toggleMic"
@@ -1471,6 +1489,9 @@ onUnmounted(() => {
       </div>
       <div v-if="isListening" class="text-[11px] text-red-500/80 mt-1.5 mb-1 animate-pulse">
         <AppIcon name="mic" class="w-3 h-3 inline-block -mt-0.5" /> Listening — tap the mic or press Enter when done
+      </div>
+      <div v-if="validationError" data-testid="validation-error" class="text-[11px] text-amber-600/90 mt-1.5 mb-1 flex items-center gap-1.5">
+        <AppIcon name="alert" class="w-3 h-3 shrink-0" /> {{ validationError }}
       </div>
       <div class="flex gap-2 mt-2">
         <button

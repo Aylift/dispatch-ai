@@ -14,6 +14,7 @@ from models import Task, Setting
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskParseIn
 from agent import transcribe_audio, parse_tasks
 from stream_agent import stream_transcribe, _ts
+from validation import validate_task_text
 
 
 # Eager-load subtasks to a bounded depth so serialization never triggers a lazy
@@ -145,13 +146,17 @@ async def list_tasks(db: AsyncSession = Depends(get_db)):
 
 @app.post("/tasks", response_model=TaskOut, status_code=201)
 async def create_task(body: TaskCreate, db: AsyncSession = Depends(get_db)):
+    try:
+        text = validate_task_text(body.text)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     is_subtask = body.parent_id is not None
     if is_subtask:
         parent = await db.get(Task, body.parent_id)
         if not parent:
             raise HTTPException(404, "Parent task not found")
     task = Task(
-        text=body.text,
+        text=text,
         description=body.description,
         # Subtasks carry no priority/timer/recurring semantics: they inherit the
         # parent's priority and are never timeboxed or recurring.
@@ -177,13 +182,20 @@ async def parse_and_create_tasks(body: TaskParseIn, db: AsyncSession = Depends(g
     parsed = parse_tasks(body.text)
     created = []
     for item in parsed:
+        try:
+            text = validate_task_text(item["text"])
+        except ValueError:
+            # Skip filler-only fragments the model may emit.
+            continue
         task = Task(
-            text=item["text"],
+            text=text,
             description=item.get("description"),
             priority=item["priority"],
         )
         db.add(task)
         created.append(task)
+    if not created:
+        raise HTTPException(422, "No actionable tasks found in the input.")
     await db.commit()
     ids = [t.id for t in created]
     result = await db.execute(
@@ -212,7 +224,10 @@ async def update_task(task_id: int, body: TaskUpdate, db: AsyncSession = Depends
     if not task:
         raise HTTPException(404, "Task not found")
     if body.text is not None:
-        task.text = body.text
+        try:
+            task.text = validate_task_text(body.text)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
     if body.description is not None:
         task.description = body.description
     if body.done is not None:
